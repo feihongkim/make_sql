@@ -1,0 +1,38 @@
+# Claude 프로젝트 디렉토리 매핑
+# 사용법: ./abledb claude [프로젝트명] [프롬프트 또는 @파일]
+
+projects:
+  - name: Admin
+    path: /home/feihong/code/Admin
+  - name: Analysis
+    path: /home/feihong/code/Analysis
+  - name: Dart
+    path: /home/feihong/code/Dart
+  - name: dbSender
+    path: /home/feihong/code/dbSender
+  - name: Input
+    path: /home/feihong/code/Input
+  - name: KIS2
+    path: /home/feihong/code/KIS2
+  - name: Logger
+    path: /home/feihong/code/Logger
+  - name: MakeSQL
+    path: /home/feihong/code/MakeSQL
+  - name: MC
+    path: /home/feihong/code/MC
+  - name: python_ForMe
+    path: /home/feihong/code/python_ForMe
+  - name: ReadJson
+    path: /home/feihong/code/ReadJson
+  - name: RESTG
+    path: /home/feihong/code/REST/RESTG
+  - name: RESTGo
+    path: /home/feihong/code/REST/RESTGo
+  - name: Saver
+    path: /home/feihong/code/Saver
+  - name: StockTopReason
+    path: /home/feihong/code/StockTopReason
+  - name: Ticker
+    path: /home/feihong/code/Ticker
+  - name: Upbit
+    path: /home/feihong/code/Upbit

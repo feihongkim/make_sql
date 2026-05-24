@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mcp-google": {
+      "command": "/home/feihong/anaconda3/envs/JARVIS/bin/python3",
+      "args": ["/home/feihong/code/MakeSQL/mcp/google/server.py"]
+    },
+    "mcp-notion": {
+      "command": "/home/feihong/anaconda3/envs/JARVIS/bin/python3",
+      "args": ["/home/feihong/code/MakeSQL/mcp/notion/server.py"]
+    }
+  }
+}

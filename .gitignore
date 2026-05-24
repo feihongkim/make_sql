@@ -1,0 +1,4 @@
+.telegram/
+config.yaml
+*.pem
+*.key
