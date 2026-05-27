@@ -142,6 +142,123 @@ func truncate(s string, maxLen int) string {
 	return string(runes[:maxLen]) + "..."
 }
 
+// HandleDockerClaude 는 docker-claude 서브커맨드를 처리합니다
+// ./abledb docker-claude [컨테이너명] [프롬프트|@파일]
+func HandleDockerClaude(ctx context.Context, args []string) {
+	if len(args) < 2 {
+		fmt.Println("사용법:")
+		fmt.Println("  ./abledb docker-claude [컨테이너명] [프롬프트]")
+		fmt.Println("  ./abledb docker-claude [컨테이너명] @파일명")
+		fmt.Println()
+		fmt.Println("예시:")
+		fmt.Println("  ./abledb docker-claude kis2_claude \"main.go 분석해줘\"")
+		fmt.Println("  ./abledb docker-claude dart_claude @prompt.txt")
+		return
+	}
+
+	containerName := args[0]
+	promptArgs := args[1:]
+
+	prompt, err := buildPrompt(promptArgs)
+	if err != nil {
+		fmt.Printf("프롬프트 처리 실패: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("[docker-claude] 컨테이너: %s\n", containerName)
+	fmt.Printf("[docker-claude] 프롬프트: %s\n", truncate(prompt, 100))
+	fmt.Println("[docker-claude] 실행 중...")
+
+	cmd := exec.CommandContext(ctx,
+		"docker", "exec", "-u", "node", containerName,
+		"claude", "-p", prompt,
+		"--dangerously-skip-permissions",
+	)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("[docker-claude] 실행 오류: %v\n", err)
+		if len(out) > 0 {
+			fmt.Println(string(out))
+		}
+		os.Exit(1)
+	}
+
+	fmt.Println(string(out))
+}
+
+// HandleSend 는 기존 Docker Claude 세션과 충돌 없이 프롬프트를 실행합니다.
+// 임시 작업 디렉토리 + Telegram 비활성화 settings로 기존 봇 세션을 보호합니다.
+// ./abledb send [컨테이너명] [프롬프트|@파일]
+func HandleSend(ctx context.Context, args []string) {
+	if len(args) < 2 {
+		fmt.Println("사용법:")
+		fmt.Println("  ./abledb send [컨테이너명] [프롬프트]")
+		fmt.Println("  ./abledb send [컨테이너명] @파일명")
+		fmt.Println()
+		fmt.Println("예시:")
+		fmt.Println("  ./abledb send dart_claude \"main.go 분석해줘\"")
+		fmt.Println("  ./abledb send kis2_claude @task.txt")
+		return
+	}
+
+	containerName := args[0]
+	promptArgs := args[1:]
+
+	prompt, err := buildPrompt(promptArgs)
+	if err != nil {
+		fmt.Printf("프롬프트 처리 실패: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("[send] 컨테이너: %s\n", containerName)
+	fmt.Printf("[send] 프롬프트: %s\n", truncate(prompt, 100))
+	fmt.Println("[send] 실행 중 (기존 Telegram 세션 보호)...")
+
+	// /workspace/.claude/settings.local.json 에 Telegram 명시적 비활성화 후 실행
+	// claude -p 종료 후 원래 settings.local.json 복원
+	// 주의: 기존 interactive 세션은 이미 시작된 상태라 settings 재로드 없음
+	script := fmt.Sprintf(`
+		ORIG=""
+		if [ -f /workspace/.claude/settings.local.json ]; then
+			ORIG=$(cat /workspace/.claude/settings.local.json)
+		fi
+		cat > /workspace/.claude/settings.local.json << 'SETTINGS'
+{"skipDangerousModePermissionPrompt":true,"enabledPlugins":{"telegram@claude-plugins-official":false},"env":{"TELEGRAM_STATE_DIR":"/tmp/send_disabled"}}
+SETTINGS
+		cd /workspace
+		claude -p %s --dangerously-skip-permissions
+		EXIT=$?
+		if [ -n "$ORIG" ]; then
+			echo "$ORIG" > /workspace/.claude/settings.local.json
+		else
+			rm -f /workspace/.claude/settings.local.json
+		fi
+		exit $EXIT
+	`, shellEscape(prompt))
+
+	cmd := exec.CommandContext(ctx,
+		"docker", "exec", "-u", "node", containerName,
+		"bash", "-c", script,
+	)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("[send] 실행 오류: %v\n", err)
+		if len(out) > 0 {
+			fmt.Println(string(out))
+		}
+		os.Exit(1)
+	}
+
+	fmt.Println(string(out))
+}
+
+// shellEscape 는 bash 단일 따옴표로 문자열을 안전하게 이스케이프합니다
+func shellEscape(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
 func printClaudeUsage() {
 	fmt.Println("사용법:")
 	fmt.Println("  ./abledb claude [프로젝트명] [프롬프트]")

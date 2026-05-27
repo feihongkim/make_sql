@@ -1,7 +1,7 @@
 # Nginx 보안 강화 가이드
 
 > 적용 서버: `3.34.223.162` (AWS Lightsail, Ubuntu 24.04)
-> 최초 적용: 2026-05-21 / 최종 업데이트: 2026-05-23
+> 최초 적용: 2026-05-21 / 최종 업데이트: 2026-05-25
 > 대상 사이트: `feivyblog.bnslab.biz` (Next.js 블로그), `tems.bnslab.biz` (Moodle LMS)
 
 ---
@@ -190,22 +190,66 @@ sudo systemctl reload nginx    # 무중단 설정 반영
 
 파일: `/etc/nginx/conf.d/blocklist.conf`
 
+> 2026-05-25: `blockip.conf`와 `blocklist.conf` 두 파일을 `blocklist.conf` 하나로 통합.
+
+현재 차단 목록 (총 39개 IP):
+
 ```nginx
-deny 190.2.135.111;   # 네덜란드 WorldStream — /cgi-bin/ 경로 순회 + 쉘 실행 시도, PHP 주입 (2026-05-23)
-deny 104.168.118.241; # 미국 ColoCrossing — /.env 접근 시도 (2026-05-23)
-deny 27.148.196.60;   # 중국 후저우 — 자동화 스캔 봇 (2026-05-23)
-deny 44.252.61.221;   # 미국 AWS EC2 (오리건) — 악성 요청 (2026-05-23)
-deny 77.83.39.159;    # 네덜란드 KPROHOST LLC — 저가 호스팅 스캔 봇, hostname 없음 (2026-05-23)
-deny 91.92.42.182;    # 불가리아 소피아 VASH KREDIT BANK AS — 동유럽 VPS 스캔 봇, hostname 없음 (2026-05-23)
-deny 193.23.201.209;  # 핀란드 헬싱키 PLAY2GO INTERNATIONAL — 불명확 AS, hostname 없음 (2026-05-23)
-deny 113.31.186.194;  # 중국 상하이 China Telecom — 스캔 봇 (2026-05-23)
+# --- 2026-05-23 추가 ---
+deny 190.2.135.111;   # 네덜란드 WorldStream — /cgi-bin/ 경로 순회 + 쉘 실행 시도
+deny 104.168.118.241; # 미국 ColoCrossing — /.env 접근 시도
+deny 27.148.196.60;   # 중국 후저우 — 자동화 스캔 봇
+deny 44.252.61.221;   # 미국 AWS EC2 (오리건) — 악성 요청
+deny 77.83.39.159;    # 네덜란드 KPROHOST LLC — 저가 호스팅 스캔 봇
+deny 91.92.42.182;    # 불가리아 소피아 — 동유럽 VPS 스캔 봇
+deny 193.23.201.209;  # 핀란드 헬싱키 — 불명확 AS, hostname 없음
+deny 113.31.186.194;  # 중국 상하이 China Telecom — 스캔 봇
+
+# --- 2026-05-24 추가 ---
+deny 47.251.88.238;   # 중국 Alibaba Cloud
+deny 120.241.79.66;   # 중국
+deny 198.199.104.186; # DigitalOcean — .git/config 스캔
+deny 68.183.229.127;  # DigitalOcean — /login 브루트포스
+deny 211.234.192.199; # 한국 — 고빈도 스캔 48건
+deny 157.143.84.87;   # 스캔 봇 22건
+deny 45.91.64.8;      # 444 차단 7회
+deny 38.43.93.182;    # 위협 2건
+deny 180.65.5.79;     # 공유기 이상 의심
+deny 122.50.1.115;    # CMD_INJECTION — Mozi 봇넷 악성코드 다운로드 시도
+deny 153.66.127.246;  # CMD_INJECTION+BRUTE_FORCE — arm7 악성코드 다운로드 시도
+deny 8.210.246.133;   # PATH_TRAVERSAL+EXPLOIT — CGI /bin/sh 접근 시도
+deny 120.77.206.95;   # PATH_TRAVERSAL+EXPLOIT — CGI /bin/sh 접근 시도
+deny 82.23.235.201;   # EXPLOIT_SCAN — .env 파일 탈취 시도
+deny 20.171.8.157;    # EXPLOIT_SCAN — Spring Actuator 스캔 zgrab
+deny 40.80.200.216;   # EXPLOIT_SCAN — Spring Actuator 스캔 zgrab
+deny 34.171.220.107;  # 수동 차단
+
+# --- 2026-05-25 추가 (nginx 로그 자동 분석 결과 — 브루트포스/스캐너/위협 탐지 상위) ---
+deny 74.7.227.142;    # 브루트포스 1위(336건) + 스캐너 1위(1878건)
+deny 3.111.168.15;    # 위협 1위(211건) + 스캐너(282건) — AWS India
+deny 179.43.146.226;  # 위협 2위(126건)
+deny 45.88.138.44;    # 위협 3위(61건) + 스캐너(348건)
+deny 216.73.216.159;  # 브루트포스 2위(48건)
+
+# --- 2026-05-25 추가 (Zyxel ZTP 취약점 스캔 — /ztp/cgi-bin/handle 라우터 원격코드 실행 시도) ---
+deny 81.71.83.149;
+deny 106.52.37.39;
+deny 124.220.48.119;
+deny 49.233.214.187;
+deny 122.51.190.175;
+deny 212.64.21.64;
+deny 106.54.205.179;
+deny 122.51.95.105;
 ```
 
 **IP 추가 방법:**
 
 ```bash
-# 원격 서버에 SSH 접속 후
-echo 'deny <IP주소>;' | sudo tee -a /etc/nginx/conf.d/blocklist.conf
+# MakeSQL 프로젝트에서 SSH 접속
+ssh -i moodle.pem ubuntu@3.34.223.162
+
+# 차단 IP 추가
+echo 'deny <IP주소>;  # 사유 (날짜)' | sudo tee -a /etc/nginx/conf.d/blocklist.conf
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
@@ -215,8 +259,11 @@ sudo nginx -t && sudo systemctl reload nginx
 |---|---|
 | 차단 | 저가 호스팅(WorldStream, ColoCrossing 등) + 공격 행위 확인 |
 | 차단 | 중국·동유럽 IP + 등록된 hostname 없음 + 444/400 차단 이력 |
+| 차단 | 위협 탐지 10건 이상 또는 스캐너 200건 이상 또는 브루트포스 30건 이상 |
 | 차단 안 함 | **Shadowserver Foundation** (scan-N.shadowserver.org) — 합법적 보안 연구 기관 |
 | 차단 안 함 | Google, AWS, Cloudflare 등 주요 서비스 대역 |
+| 오탐 주의 | Moodle `/login/index.php` 정상 접근 → BRUTE_FORCE_PATH 오탐 가능 |
+| 오탐 주의 | Next.js RSC(`?_rsc=`) 병렬 요청 → Rate Limit 오탐 가능 |
 
 > 주의: IP 차단 전 반드시 `ipinfo.io` 등으로 소속 기관 확인. Shadowserver 등 보안 연구 기관을 잘못 차단하면 취약점 알림을 받지 못할 수 있음.
 
@@ -225,7 +272,8 @@ sudo nginx -t && sudo systemctl reload nginx
 | IP | 설명 | 비고 |
 |---|---|---|
 | 1.215.219.228 | 사무실 (KT) | curl 헬스체크 스크립트 포함 |
-| 180.65.5.79 | 집 (Home) | iPhone/iPad/Mac 다수 기기, 공유기 이상 여부 지속 모니터링 |
+| 1.215.219.230 | 사무실 (KT) | Chrome Edge 블로그 정상 방문 |
+| 211.234.188.81 | 정상 사용자 | Moodle 로그인 + 블로그 방문 (BRUTE_FORCE_PATH 오탐) |
 | 198.235.24.145 | Palo Alto Networks Cortex Xpanse | 합법적 보안 스캐너 |
 | 103.203.59.1 | security.ipip.net | HTTP 배너 감지 봇 |
 

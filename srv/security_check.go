@@ -2,7 +2,6 @@ package srv
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -124,14 +123,8 @@ func HandleSecurityCheck() string {
 	return report.String()
 }
 
-// (Scheduler) runSecurityCheck 는 점검 결과를 Claude를 통해 텔레그램으로 전송한다.
+// (Scheduler) runSecurityCheck 는 점검 결과를 Claude(makesql_claude 컨테이너)를 통해 텔레그램으로 전송한다.
 func (s *Scheduler) runSecurityCheck() {
-	self, err := localRunSelf()
-	if err != nil {
-		fmt.Printf("[scheduler] 실행 경로 확인 실패: %v\n", err)
-		return
-	}
-
 	output := HandleSecurityCheck()
 	if output == "" {
 		fmt.Println("[scheduler] security-check 결과 없음")
@@ -140,14 +133,18 @@ func (s *Scheduler) runSecurityCheck() {
 
 	prompt := fmt.Sprintf(`다음은 내부 서버 4대(white/117/130/232)에 대한 일일 보안 점검 결과야.
 각 서버별로 이상 여부를 판단하고, 의심스러운 항목이 있으면 강조해서
-텔레그램 chat_id 7723743534로 보안 점검 리포트를 전송해줘.
+한국어 텍스트로 반환해줘 (텔레그램 전송은 하지 말 것).
 이상 없으면 "전체 정상"으로 간단히, 이상 있으면 서버명과 항목을 명시해줘.
 
 %s`, output)
 
-	runSubprocess(self, []string{"claude", "MakeSQL", prompt})
+	result := runClaudeScheduler(prompt)
+	if result == "" {
+		fmt.Println("[scheduler] security-check 분석 결과 없음")
+		return
+	}
+	if err := sendTelegramMsg(result); err != nil {
+		fmt.Printf("[scheduler] 텔레그램 전송 실패: %v\n", err)
+	}
 }
 
-func localRunSelf() (string, error) {
-	return os.Executable()
-}

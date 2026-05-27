@@ -1,13 +1,57 @@
 package srv
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
+	"regexp"
+	"sort"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
+
+const (
+	telegramBotToken   = "8678638419:AAHqimHvEH1Lt6bXe1CFVWu5FzPDWelTuKQ"
+	telegramChatID     = "7723743534"
+	schedulerWorkspace = "/home/feihong/code/SchedulerWorkspace"
+)
+
+// sendTelegramMsg sends a message directly to Telegram via Bot API (no MCP, no plugin).
+func sendTelegramMsg(text string) error {
+	apiURL := "https://api.telegram.org/bot" + telegramBotToken + "/sendMessage"
+	resp, err := http.PostForm(apiURL, url.Values{
+		"chat_id": {telegramChatID},
+		"text":    {text},
+	})
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("telegram API 오류: %s", string(body))
+	}
+	return nil
+}
+
+// runClaudeScheduler runs claude -p inside makesql_claude container (no token conflict with host).
+func runClaudeScheduler(prompt string) string {
+	cmd := exec.Command("docker", "exec", "-u", "node", "makesql_claude",
+		"claude", "-p", prompt, "--dangerously-skip-permissions")
+	out, err := cmd.Output()
+	if err != nil {
+		fmt.Printf("[scheduler] claude 오류: %v\n", err)
+		return strings.TrimSpace(string(out))
+	}
+	return strings.TrimSpace(string(out))
+}
 
 var loc *time.Location
 
@@ -219,32 +263,34 @@ func (s *Scheduler) dispatch(task Task, now time.Time) {
 }
 
 func (s *Scheduler) runMorningBriefing() {
-	self, err := os.Executable()
-	if err != nil {
-		fmt.Printf("[scheduler] 실행 경로 확인 실패: %v\n", err)
-		return
-	}
+	todayKST := time.Now().In(loc).Format("2006-01-02")
+	prompt := fmt.Sprintf(`현재 날짜는 %s (KST) 이다. 모든 시간은 KST(UTC+9) 기준으로 표시해줘.
 
-	// claude를 사용해서 일정 + 메일 + Notion 확인 후 텔레그램 전송
-	// 로컬 MCP 서버 도구명 사용: cal_list_events, gmail_search, notion_get_blocks
-	prompt := `다음 작업을 수행해줘:
-1) cal_list_events 도구로 오늘 일정을 확인해줘
+다음 작업을 수행해줘:
+1) cal_list_events 도구로 오늘(%s) 일정을 확인해줘 (timeZone: Asia/Seoul, timeMin: %sT00:00:00+09:00, timeMax: %sT23:59:59+09:00)
 2) gmail_search 도구로 최근 24시간 동안 받은 메일을 확인해줘 (query: "newer_than:1d")
 3) notion_get_blocks 도구로 ToDoList 페이지(block_id: 10e6b904-d9ee-8063-bed0-f14c593a810d)의 하위 블록을 가져오고, 가장 마지막 child_page의 block_id로 다시 notion_get_blocks를 호출해서 미완료 to_do 항목을 확인해줘
-4) 결과를 아래 형식으로 텔레그램 chat_id 7723743534에 전송해줘:
+4) 결과를 아래 형식으로 텍스트로 반환해줘 (텔레그램 전송은 하지 말 것, 모든 시간은 KST 기준):
 
-📅 오늘의 일정 (날짜)
-- 일정 목록 (없으면 "일정 없음")
+오늘의 일정 (%s KST)
+- 일정 목록 (없으면 "일정 없음"), 시간은 KST(UTC+9)로 변환해서 표시
 
-📬 최근 24시간 메일 (건수)
+최근 24시간 메일 (건수)
 - 보낸사람 / 제목 (전체)
 
-📋 Notion ToDoList (미완료)
+Notion ToDoList - %s (미완료)
 - 미완료 항목 목록
 - 진행률 표시
-`
+`, todayKST, todayKST, todayKST, todayKST, todayKST, time.Now().In(loc).Format("060102"))
 
-	runSubprocess(self, []string{"claude", "MakeSQL", prompt})
+	result := runClaudeScheduler(prompt)
+	if result == "" {
+		fmt.Println("[scheduler] morning briefing 결과 없음")
+		return
+	}
+	if err := sendTelegramMsg(result); err != nil {
+		fmt.Printf("[scheduler] 텔레그램 전송 실패: %v\n", err)
+	}
 }
 
 func (s *Scheduler) runNginxAnalyze() {
@@ -264,15 +310,88 @@ func (s *Scheduler) runNginxAnalyze() {
 		return
 	}
 
-	prompt := fmt.Sprintf(`다음 JSON은 nginx 접근 로그 보안 분석 결과야 (최근 2시간).
-feivyblog(블로그), moodle(LMS), unknown(서버 판별 불가) 세 서버에 대해
-보안 위협, 봇/스캐너, 무차별 대입, 정상 트래픽 현황을 요약해서
-텔레그램 chat_id 7723743534로 리포트 보내줘.
-위협이 없으면 "이상 없음"으로 간단히, 위협이 있으면 IP와 공격 유형을 명시해줘.
+	// JSON 파싱 후 Go에서 직접 포맷 (claude -p 호출 없음)
+	msg := formatNginxAnalyzeMsg(output)
+	if err := sendTelegramMsg(msg); err != nil {
+		fmt.Printf("[scheduler] 텔레그램 전송 실패: %v\n", err)
+	}
+}
 
-%s`, output)
+// NginxAnalyzeResult 는 nginx 분석 JSON 최소 구조
+type NginxAnalyzeResult struct {
+	PeriodHours   int `json:"period_hours"`
+	TotalRequests int `json:"total_requests"`
+	Servers       map[string]struct {
+		Requests  int            `json:"requests"`
+		UniqueIPs int            `json:"unique_ips"`
+		Bots      int            `json:"bots"`
+		BotPct    float64        `json:"bot_pct"`
+		Status    map[string]int `json:"status"`
+	} `json:"servers"`
+	Security struct {
+		ThreatTotal  int            `json:"threat_total"`
+		ThreatByType map[string]int `json:"threat_by_type"`
+		ThreatTopIPs map[string]int `json:"threat_top_ips"`
+	} `json:"security"`
+	Fail2Ban struct {
+		Bans   int `json:"bans"`
+		Unbans int `json:"unbans"`
+	} `json:"fail2ban"`
+	Errors struct {
+		Total int `json:"total"`
+	} `json:"errors"`
+}
 
-	runSubprocess(self, []string{"claude", "MakeSQL", prompt})
+func formatNginxAnalyzeMsg(jsonStr string) string {
+	idx := strings.Index(jsonStr, "{")
+	if idx > 0 {
+		jsonStr = jsonStr[idx:]
+	}
+
+	var r NginxAnalyzeResult
+	if err := json.Unmarshal([]byte(jsonStr), &r); err != nil {
+		return "[nginx-analyze] JSON 파싱 실패: " + err.Error()
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("🛡 Nginx 보안 분석 (최근 %dh, 총 %s건)\n\n", r.PeriodHours, commaInt(r.TotalRequests)))
+
+	for _, srv := range []string{"feivyblog", "moodle", "unknown"} {
+		s, ok := r.Servers[srv]
+		if !ok {
+			continue
+		}
+		b.WriteString(fmt.Sprintf("【%s】요청:%s 봇:%.1f%%\n", srv, commaInt(s.Requests), s.BotPct))
+	}
+	b.WriteString("\n")
+
+	if r.Security.ThreatTotal > 0 {
+		b.WriteString(fmt.Sprintf("⚠️ 위협 %d건\n", r.Security.ThreatTotal))
+		for typ, cnt := range r.Security.ThreatByType {
+			b.WriteString(fmt.Sprintf("  %s: %d건\n", typ, cnt))
+		}
+		if len(r.Security.ThreatTopIPs) > 0 {
+			b.WriteString("  위협 IP: ")
+			i := 0
+			for ip, cnt := range r.Security.ThreatTopIPs {
+				if i >= 3 {
+					break
+				}
+				b.WriteString(fmt.Sprintf("%s(%d) ", ip, cnt))
+				i++
+			}
+			b.WriteString("\n")
+		}
+	} else {
+		b.WriteString("✅ 보안 위협 없음\n")
+	}
+
+	b.WriteString(fmt.Sprintf("🔒 Fail2Ban: 밴 %d건 / 해제 %d건\n", r.Fail2Ban.Bans, r.Fail2Ban.Unbans))
+	if r.Errors.Total > 0 {
+		b.WriteString(fmt.Sprintf("🔴 에러로그 %d건\n", r.Errors.Total))
+	}
+
+	return strings.TrimSpace(b.String())
 }
 
 func getExecDir(self string) string {
@@ -286,12 +405,6 @@ func getExecDir(self string) string {
 }
 
 func (s *Scheduler) runTodoCopy() {
-	self, err := os.Executable()
-	if err != nil {
-		fmt.Printf("[scheduler] 실행 경로 확인 실패: %v\n", err)
-		return
-	}
-
 	today := time.Now().In(loc).Format("060102") // YYMMDD
 
 	prompt := fmt.Sprintf(`다음 작업을 수행해줘:
@@ -299,9 +412,10 @@ func (s *Scheduler) runTodoCopy() {
 2) 가장 마지막 child_page의 block_id로 notion_get_blocks를 호출해서 모든 to_do 항목을 가져와줘
 3) 오늘 날짜(%s)와 같은 제목의 child_page가 이미 있으면 아무것도 하지 말고 "이미 존재" 라고만 출력해줘
 4) 없으면 notion-create-pages 도구로 ToDoList 페이지(page_id: 10e6b904-d9ee-8063-bed0-f14c593a810d) 하위에 제목 "%s"인 새 페이지를 생성하고, 가져온 to_do 항목을 동일한 checked 상태로 모두 복사해줘
+5) 완료 후 결과를 텍스트로 반환해줘 (텔레그램 전송은 하지 말 것)
 `, today, today)
 
-	runSubprocess(self, []string{"claude", "MakeSQL", prompt})
+	runClaudeScheduler(prompt)
 }
 
 func (s *Scheduler) runLogAnalyze(args []string) {
@@ -311,7 +425,6 @@ func (s *Scheduler) runLogAnalyze(args []string) {
 		return
 	}
 
-	// log-analyze 실행
 	analyzeArgs := append([]string{"log-analyze"}, args...)
 	output := runSubprocessOutput(self, analyzeArgs)
 
@@ -320,14 +433,232 @@ func (s *Scheduler) runLogAnalyze(args []string) {
 		return
 	}
 
-	// claude로 분석 결과를 텔레그램에 전송
-	prompt := fmt.Sprintf(`다음 JSON은 White 서버 LOG 분석 결과야.
-모듈별 요약, API 실패, ERROR, KIS 완료 현황, 뉴스/AI 상태를 정리해서
-텔레그램 chat_id 7723743534로 요약 리포트를 전송해줘.
+	// JSON 파싱 후 Go에서 직접 포맷 (claude -p 호출 없음)
+	msg := formatLogAnalyzeMsg(output)
+	if err := sendTelegramMsg(msg); err != nil {
+		fmt.Printf("[scheduler] 텔레그램 전송 실패: %v\n", err)
+	}
+}
 
-%s`, output)
+// formatLogAnalyzeMsg 는 log-analyze JSON을 Telegram 메시지로 포맷한다.
+func formatLogAnalyzeMsg(jsonStr string) string {
+	idx := strings.Index(jsonStr, "{")
+	if idx > 0 {
+		jsonStr = jsonStr[idx:]
+	}
+	var r LogAnalyzeResult
+	if err := json.Unmarshal([]byte(jsonStr), &r); err != nil {
+		return "[log-analyze] JSON 파싱 실패: " + err.Error()
+	}
 
-	runSubprocess(self, []string{"claude", "MakeSQL", prompt})
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("📊 White LOG 분석 (%s ~ %s)\n\n", r.Range.From[11:16], r.Range.To[11:16]))
+
+	// 전체 요약
+	errMark := "✅"
+	if r.Summary.Errors > 0 {
+		errMark = "🔴"
+	}
+	b.WriteString("【전체 요약】\n")
+	b.WriteString(fmt.Sprintf("  전체 로그: %s건\n", commaInt(r.Summary.TotalLogs)))
+	b.WriteString(fmt.Sprintf("  API 실패: %d건 (%s)\n", r.Summary.APIFailures, r.Summary.APIFailureRate))
+	b.WriteString(fmt.Sprintf("  ERROR: %d건 %s\n\n", r.Summary.Errors, errMark))
+
+	// 모듈별 로그 분포 (전체)
+	if len(r.Modules) > 0 {
+		type kv struct{ k string; v int }
+		var mods []kv
+		for k, v := range r.Modules {
+			mods = append(mods, kv{k, v})
+		}
+		sort.Slice(mods, func(i, j int) bool { return mods[i].v > mods[j].v })
+		b.WriteString("【모듈별 로그 분포】\n")
+		for _, m := range mods {
+			b.WriteString(fmt.Sprintf("  %s: %s건\n", m.k, commaInt(m.v)))
+		}
+		b.WriteString("\n")
+	}
+
+	// API 실패 현황
+	if r.APIFailures.Total > 0 {
+		b.WriteString(fmt.Sprintf("【API 실패 현황 (%d건)】\n", r.APIFailures.Total))
+		b.WriteString(fmt.Sprintf("  http500 %d건 / timeout %d건 / 기타 %d건\n",
+			r.APIFailures.ByReason.HTTP500, r.APIFailures.ByReason.Timeout, r.APIFailures.ByReason.Other))
+		type kv struct{ k string; v int }
+		var tasks []kv
+		for k, v := range r.APIFailures.ByTask {
+			tasks = append(tasks, kv{k, v})
+		}
+		sort.Slice(tasks, func(i, j int) bool { return tasks[i].v > tasks[j].v })
+		for _, t := range tasks {
+			b.WriteString(fmt.Sprintf("  · %s: %d건\n", t.k, t.v))
+		}
+		if r.Summary.Errors == 0 {
+			b.WriteString("  → 재시도를 통해 전량 복구 완료\n")
+		}
+		b.WriteString("\n")
+	}
+
+	// KIS 파이프라인 완료 현황
+	if len(r.KISCompletions) > 0 {
+		// 태스크명 → 마지막 완료 메시지로 중복 제거
+		taskMap := make(map[string]string)
+		taskOrder := []string{}
+		reTask := regexp.MustCompile(`\[([A-Z]{2}\.[A-Z_a-z]+)\]`)
+		for _, comp := range r.KISCompletions {
+			m := reTask.FindStringSubmatch(comp)
+			if m == nil {
+				continue
+			}
+			name := m[1]
+			if _, exists := taskMap[name]; !exists {
+				taskOrder = append(taskOrder, name)
+			}
+			taskMap[name] = comp
+		}
+		b.WriteString(fmt.Sprintf("【KIS 파이프라인 완료 (%d개 태스크)】\n", len(taskOrder)))
+		reStd := regexp.MustCompile(`성공=(\d+), 실패=(\d+), 스킵=(\d+), MERGE=(\d+)건`)
+		reRows := regexp.MustCompile(`(\d+) rows merged \((\d+) pages\)`)
+		reRows2 := regexp.MustCompile(`(\d+) rows merged`)
+		reRetry := regexp.MustCompile(`재시도 완료: (\d+)/(\d+)건 복구`)
+		for _, name := range taskOrder {
+			comp := taskMap[name]
+			if m := reStd.FindStringSubmatch(comp); m != nil {
+				ok, _ := strconv.Atoi(m[1])
+				skip, _ := strconv.Atoi(m[3])
+				merge, _ := strconv.Atoi(m[4])
+				b.WriteString(fmt.Sprintf("  %s | 성공 %s 스킵 %s MERGE %s건\n",
+					name, commaInt(ok), commaInt(skip), commaInt(merge)))
+			} else if m := reRows.FindStringSubmatch(comp); m != nil {
+				rows, _ := strconv.Atoi(m[1])
+				pages, _ := strconv.Atoi(m[2])
+				b.WriteString(fmt.Sprintf("  %s | %s건 (%s pages)\n",
+					name, commaInt(rows), commaInt(pages)))
+			} else if m := reRows2.FindStringSubmatch(comp); m != nil {
+				rows, _ := strconv.Atoi(m[1])
+				b.WriteString(fmt.Sprintf("  %s | %s건 merged\n", name, commaInt(rows)))
+			} else if m := reRetry.FindStringSubmatch(comp); m != nil {
+				b.WriteString(fmt.Sprintf("  %s | 재시도 복구 %s/%s건\n", name, m[1], m[2]))
+			} else {
+				// 그 외: 원문 요약
+				short := comp
+				if i := strings.Index(comp, "] 완료"); i > 0 {
+					short = comp[i+2:]
+				}
+				if len(short) > 60 {
+					short = short[:60]
+				}
+				b.WriteString(fmt.Sprintf("  %s | %s\n", name, strings.TrimSpace(short)))
+			}
+		}
+		b.WriteString("\n")
+	}
+
+	// KIS 스케줄러 현황
+	ks := r.KISScheduler
+	if len(ks.Completed)+len(ks.Running)+len(ks.Failed) > 0 {
+		b.WriteString("【KIS 스케줄러 현황】\n")
+		if len(ks.Completed) > 0 {
+			b.WriteString("  완료: " + strings.Join(ks.Completed, ", ") + "\n")
+		}
+		if len(ks.Running) > 0 {
+			b.WriteString("  실행중: " + strings.Join(ks.Running, ", ") + "\n")
+		}
+		if len(ks.Failed) > 0 {
+			b.WriteString("  실패: " + strings.Join(ks.Failed, ", ") + "\n")
+		}
+		b.WriteString("\n")
+	}
+
+	// 뉴스 수집 현황
+	if r.News.Total > 0 {
+		b.WriteString(fmt.Sprintf("【뉴스 수집 현황】총 %s건\n", commaInt(r.News.Total)))
+		type newsCycle struct{ time string; total, ok int }
+		var cycles []newsCycle
+		totalOK, totalFill := 0, 0
+		for _, detail := range r.News.Details {
+			idx1 := strings.Index(detail, "완료: ")
+			idx2 := strings.Index(detail, "건 중 ")
+			idx3 := strings.Index(detail, "건 본문 채우기 성공")
+			if idx1 < 0 || idx2 < 0 || idx3 < 0 {
+				continue
+			}
+			tot, err1 := strconv.Atoi(strings.TrimSpace(detail[idx1+len("완료: "):idx2]))
+			ok, err2 := strconv.Atoi(strings.TrimSpace(detail[idx2+len("건 중 "):idx3]))
+			if err1 != nil || err2 != nil {
+				continue
+			}
+			t := ""
+			if len(detail) >= 16 {
+				t = detail[11:16]
+			}
+			cycles = append(cycles, newsCycle{t, tot, ok})
+			totalOK += ok
+			totalFill += tot
+		}
+		for i, c := range cycles {
+			rate := 0
+			if c.total > 0 {
+				rate = c.ok * 100 / c.total
+			}
+			b.WriteString(fmt.Sprintf("  [%d차] %s | 수집 %d건 → 본문 성공 %d건(%d%%) 실패 %d건\n",
+				i+1, c.time, c.total, c.ok, rate, c.total-c.ok))
+		}
+		if len(cycles) > 1 && totalFill > 0 {
+			overallRate := totalOK * 100 / totalFill
+			b.WriteString(fmt.Sprintf("  합계: %d건 수집 / 본문 성공 %d건(%d%%)\n",
+				totalFill, totalOK, overallRate))
+		}
+		b.WriteString("\n")
+	}
+
+	// AI 분석 현황
+	b.WriteString("【AI 분석 현황】\n")
+	if r.AIAnalysis.Total > 0 {
+		b.WriteString(fmt.Sprintf("  분석 완료: %s건\n\n", commaInt(r.AIAnalysis.Total)))
+	} else {
+		b.WriteString("  분석 완료: 0건 (해당 시간대 미실행)\n\n")
+	}
+
+	// 종합 평가
+	b.WriteString("【종합 평가】\n")
+	if r.Summary.Errors > 0 {
+		b.WriteString(fmt.Sprintf("  🔴 ERROR %d건 발생 — 즉시 확인 필요\n", r.Summary.Errors))
+	} else if r.APIFailures.Total > 0 {
+		b.WriteString(fmt.Sprintf("  ✅ 정상 운영 중. API 실패 %d건 발생했으나 재시도 복구 완료.", r.APIFailures.Total))
+		ks := r.KISScheduler
+		if len(ks.Completed) > 0 {
+			b.WriteString(fmt.Sprintf(" KIS %d배치 완료.", len(ks.Completed)))
+		}
+		if r.News.Total > 0 {
+			b.WriteString(" 뉴스 수집 정상.")
+		}
+		b.WriteString("\n")
+	} else {
+		b.WriteString("  ✅ 전체 정상 — API 실패 0건, ERROR 0건.")
+		ks := r.KISScheduler
+		if len(ks.Completed) > 0 {
+			b.WriteString(fmt.Sprintf(" KIS %d배치 완료.", len(ks.Completed)))
+		}
+		if r.News.Total > 0 {
+			b.WriteString(" 뉴스 수집 정상.")
+		}
+		b.WriteString("\n")
+	}
+
+	return strings.TrimSpace(b.String())
+}
+
+func commaInt(n int) string {
+	s := fmt.Sprintf("%d", n)
+	out := ""
+	for i, c := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			out += ","
+		}
+		out += string(c)
+	}
+	return out
 }
 
 // inTimeWindow 은 "HH:MM" 기준 2분 윈도우 체크

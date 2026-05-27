@@ -2,3 +2,7 @@
 config.yaml
 *.pem
 *.key
+docker-config/ssh/
+docker-config/telegram/.env
+mcp/google/token.json
+mcp/google/credentials.json
