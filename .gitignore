@@ -1,4 +1,8 @@
-.telegram/
+# 빌드 바이너리
+abledb
+abledb_Hope
+
+# 설정/인증 (민감정보)
 config.yaml
 *.pem
 *.key
@@ -6,3 +10,20 @@ docker-config/ssh/
 docker-config/telegram/.env
 mcp/google/token.json
 mcp/google/credentials.json
+
+# Claude Code
+.claude/
+.telegram/
+CLAUDE.md
+
+# Docker
+Dockerfile
+docker-compose.yml
+docker-config/
+
+# MCP
+mcp/notion/
+
+# 로그
+nginx_log/
+test_logs/
