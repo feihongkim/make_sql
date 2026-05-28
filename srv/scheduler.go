@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"os/signal"
 	"regexp"
 	"sort"
@@ -41,17 +40,9 @@ func sendTelegramMsg(text string) error {
 	return nil
 }
 
-// runClaudeScheduler runs claude -p inside makesql_claude container (no token conflict with host).
-func runClaudeScheduler(prompt string) string {
-	cmd := exec.Command("docker", "exec", "-u", "node", "makesql_claude",
-		"claude", "-p", prompt, "--dangerously-skip-permissions")
-	out, err := cmd.Output()
-	if err != nil {
-		fmt.Printf("[scheduler] claude 오류: %v\n", err)
-		return strings.TrimSpace(string(out))
-	}
-	return strings.TrimSpace(string(out))
-}
+// morning_briefing, todo_copy 태스크는 /schedule 원격 루틴으로 이전됨:
+// - morning_briefing: trig_01HKH8KAF4F9C2HRMbR3ga6D (매일 KST 08:00)
+// - todo_copy:        trig_01Jod4W84Cskbt5YZ6wwnZS7 (매일 KST 08:00)
 
 var loc *time.Location
 
@@ -72,16 +63,6 @@ type Task struct {
 // BuildSchedule 은 스케줄 목록을 구성한다.
 func BuildSchedule() []Task {
 	return []Task{
-		{
-			Label:    "morning_briefing",
-			Time:     "08:00",
-			Commands: []string{"morning-briefing"},
-		},
-		{
-			Label:    "todo_copy",
-			Time:     "08:00",
-			Commands: []string{"todo-copy"},
-		},
 		{
 			Label:    "log_analyze",
 			Every:    3,
@@ -244,10 +225,6 @@ func (s *Scheduler) dispatch(task Task, now time.Time) {
 
 	go func() {
 		switch task.Commands[0] {
-		case "morning-briefing":
-			s.runMorningBriefing()
-		case "todo-copy":
-			s.runTodoCopy()
 		case "nginx-analyze":
 			s.runNginxAnalyze()
 		case "log-analyze":
@@ -262,36 +239,6 @@ func (s *Scheduler) dispatch(task Task, now time.Time) {
 	}()
 }
 
-func (s *Scheduler) runMorningBriefing() {
-	todayKST := time.Now().In(loc).Format("2006-01-02")
-	prompt := fmt.Sprintf(`현재 날짜는 %s (KST) 이다. 모든 시간은 KST(UTC+9) 기준으로 표시해줘.
-
-다음 작업을 수행해줘:
-1) cal_list_events 도구로 오늘(%s) 일정을 확인해줘 (timeZone: Asia/Seoul, timeMin: %sT00:00:00+09:00, timeMax: %sT23:59:59+09:00)
-2) gmail_search 도구로 최근 24시간 동안 받은 메일을 확인해줘 (query: "newer_than:1d")
-3) notion_get_blocks 도구로 ToDoList 페이지(block_id: 10e6b904-d9ee-8063-bed0-f14c593a810d)의 하위 블록을 가져오고, 가장 마지막 child_page의 block_id로 다시 notion_get_blocks를 호출해서 미완료 to_do 항목을 확인해줘
-4) 결과를 아래 형식으로 텍스트로 반환해줘 (텔레그램 전송은 하지 말 것, 모든 시간은 KST 기준):
-
-오늘의 일정 (%s KST)
-- 일정 목록 (없으면 "일정 없음"), 시간은 KST(UTC+9)로 변환해서 표시
-
-최근 24시간 메일 (건수)
-- 보낸사람 / 제목 (전체)
-
-Notion ToDoList - %s (미완료)
-- 미완료 항목 목록
-- 진행률 표시
-`, todayKST, todayKST, todayKST, todayKST, todayKST, time.Now().In(loc).Format("060102"))
-
-	result := runClaudeScheduler(prompt)
-	if result == "" {
-		fmt.Println("[scheduler] morning briefing 결과 없음")
-		return
-	}
-	if err := sendTelegramMsg(result); err != nil {
-		fmt.Printf("[scheduler] 텔레그램 전송 실패: %v\n", err)
-	}
-}
 
 func (s *Scheduler) runNginxAnalyze() {
 	self, err := os.Executable()
@@ -404,19 +351,6 @@ func getExecDir(self string) string {
 	return "."
 }
 
-func (s *Scheduler) runTodoCopy() {
-	today := time.Now().In(loc).Format("060102") // YYMMDD
-
-	prompt := fmt.Sprintf(`다음 작업을 수행해줘:
-1) notion_get_blocks 도구로 ToDoList 페이지(block_id: 10e6b904-d9ee-8063-bed0-f14c593a810d)의 하위 블록을 가져와서 child_page 목록을 확인해줘
-2) 가장 마지막 child_page의 block_id로 notion_get_blocks를 호출해서 모든 to_do 항목을 가져와줘
-3) 오늘 날짜(%s)와 같은 제목의 child_page가 이미 있으면 아무것도 하지 말고 "이미 존재" 라고만 출력해줘
-4) 없으면 notion-create-pages 도구로 ToDoList 페이지(page_id: 10e6b904-d9ee-8063-bed0-f14c593a810d) 하위에 제목 "%s"인 새 페이지를 생성하고, 가져온 to_do 항목을 동일한 checked 상태로 모두 복사해줘
-5) 완료 후 결과를 텍스트로 반환해줘 (텔레그램 전송은 하지 말 것)
-`, today, today)
-
-	runClaudeScheduler(prompt)
-}
 
 func (s *Scheduler) runLogAnalyze(args []string) {
 	self, err := os.Executable()
