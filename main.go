@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"MakeSQL/console"
+	"MakeSQL/scheduler"
 	"MakeSQL/srv"
 
 	"gopkg.in/yaml.v3"
@@ -32,7 +33,7 @@ func main() {
 	}
 
 	timeout := 5 * time.Minute
-	if len(os.Args) > 1 && (os.Args[1] == "copy" || os.Args[1] == "log-analyze" || os.Args[1] == "claude" || os.Args[1] == "docker-claude" || os.Args[1] == "send") {
+	if len(os.Args) > 1 && (os.Args[1] == "copy" || os.Args[1] == "log-analyze" || os.Args[1] == "claude" || os.Args[1] == "docker-claude" || os.Args[1] == "send" || os.Args[1] == "surge-report" || os.Args[1] == "surge-sync") {
 		timeout = 30 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -61,11 +62,17 @@ func main() {
 		srv.HandleDockerClaude(ctx, subArgs)
 	case "send":
 		srv.HandleSend(ctx, subArgs)
+	case "surge-report":
+		srv.HandleSurgeReport(ctx, subArgs)
+	case "surge-sync":
+		srv.RunSurgeSync()
+	case "temp-check":
+		srv.RunTempCheck()
 	case "security-check":
 		fmt.Println(srv.HandleSecurityCheck())
 	case "scheduler":
 		cancel() // 스케줄러는 자체 루프로 동작하므로 타임아웃 해제
-		srv.HandleScheduler(subArgs)
+		scheduler.HandleScheduler(subArgs)
 		return
 	default:
 		fmt.Printf("알 수 없는 명령: %s\n", os.Args[1])
@@ -80,8 +87,9 @@ func main() {
 		fmt.Println("  ./abledb claude [프로젝트명] [프롬프트|@파일]   Claude 코드 수정")
 		fmt.Println("  ./abledb docker-claude [컨테이너명] [프롬프트|@파일] Docker Claude 실행")
 		fmt.Println("  ./abledb send [컨테이너명] [프롬프트|@파일]      Docker Claude 세션에 안전하게 메시지 전송")
+		fmt.Println("  ./abledb surge-report [YYYYMMDD[-YYYYMMDD]] [--out /path] [--server name]  급등 종목 분석 MD 생성")
 		fmt.Println("  ./abledb security-check                      서버 보안 점검 (4대)")
-	fmt.Println("  ./abledb scheduler [status|stop]             스케줄러 실행/관리")
+		fmt.Println("  ./abledb scheduler [status|stop]             스케줄러 실행/관리")
 		fmt.Println("  ./abledb copy [소스] [소스DB] [대상] [대상DB] [테이블] [조건]  데이터 복사")
 		os.Exit(1)
 	}

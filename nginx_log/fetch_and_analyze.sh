@@ -3,7 +3,7 @@
 # 사용법: ./fetch_and_analyze.sh [시간수(기본2)]
 
 HOURS=${1:-2}
-SSH_KEY="/home/feihong/code/MakeSQL/moodle.pem"
+SSH_KEY="$HOME/.ssh/moodle.pem"
 REMOTE_HOST="ubuntu@3.34.223.162"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TMP_ACCESS="/tmp/nginx_access_$$.log"
@@ -35,5 +35,5 @@ if [ ! -s "$TMP_ACCESS" ]; then
 fi
 
 # 분석 실행 (JSON 출력)
-/home/feihong/anaconda3/envs/JARVIS/bin/python3 "$SCRIPT_DIR/analyze.py" \
+python3 "$SCRIPT_DIR/analyze.py" \
     --hours "$HOURS" --json "$TMP_ACCESS" "$TMP_ERROR" "$TMP_F2B"

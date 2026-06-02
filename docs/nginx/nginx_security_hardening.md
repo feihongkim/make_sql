@@ -1,7 +1,7 @@
 # Nginx 보안 강화 가이드
 
 > 적용 서버: `3.34.223.162` (AWS Lightsail, Ubuntu 24.04)
-> 최초 적용: 2026-05-21 / 최종 업데이트: 2026-05-25
+> 최초 적용: 2026-05-21 / 최종 업데이트: 2026-05-29
 > 대상 사이트: `feivyblog.bnslab.biz` (Next.js 블로그), `tems.bnslab.biz` (Moodle LMS)
 
 ---
@@ -186,70 +186,78 @@ sudo systemctl reload nginx    # 무중단 설정 반영
 
 ---
 
-### 5단계 — IP 수동 차단 목록 (`blocklist.conf`)
+### 5단계 — IP 차단: geo 모듈 (`geo_blocklist.conf`)
 
-파일: `/etc/nginx/conf.d/blocklist.conf`
+> 2026-05-25: `blockip.conf` + `blocklist.conf` 통합 (39개 IP, deny 방식)
+> 2026-05-29: `blocklist.conf` → `geo_blocklist.conf`로 마이그레이션 (geo 모듈 방식)
 
-> 2026-05-25: `blockip.conf`와 `blocklist.conf` 두 파일을 `blocklist.conf` 하나로 통합.
+파일: `/etc/nginx/conf.d/geo_blocklist.conf`
+현재 차단: **5,614개** (개별 IP + CIDR 서브넷)
 
-현재 차단 목록 (총 39개 IP):
+#### deny 방식 vs geo 모듈 방식
 
-```nginx
-# --- 2026-05-23 추가 ---
-deny 190.2.135.111;   # 네덜란드 WorldStream — /cgi-bin/ 경로 순회 + 쉘 실행 시도
-deny 104.168.118.241; # 미국 ColoCrossing — /.env 접근 시도
-deny 27.148.196.60;   # 중국 후저우 — 자동화 스캔 봇
-deny 44.252.61.221;   # 미국 AWS EC2 (오리건) — 악성 요청
-deny 77.83.39.159;    # 네덜란드 KPROHOST LLC — 저가 호스팅 스캔 봇
-deny 91.92.42.182;    # 불가리아 소피아 — 동유럽 VPS 스캔 봇
-deny 193.23.201.209;  # 핀란드 헬싱키 — 불명확 AS, hostname 없음
-deny 113.31.186.194;  # 중국 상하이 China Telecom — 스캔 봇
+| 항목 | 기존 deny 방식 | geo 모듈 방식 (현재) |
+|---|---|---|
+| 설정 파일 | `blocklist.conf` | `geo_blocklist.conf` |
+| 문법 | `deny 1.2.3.4;` | `1.2.3.4 1;` |
+| CIDR 서브넷 | 불가 | `1.2.3.0/24 1;` (서브넷 단위 차단 가능) |
+| 적용 위치 | `server` 블록 내 자동 적용 | `server` 블록에서 `if ($geo_blocked)` 명시 필요 |
+| 성능 | IP당 선형 탐색 O(n) | Radix tree 기반 O(1) 조회 |
+| 확장성 | 수백 개까지 적합 | 수만 개 이상 가능 |
 
-# --- 2026-05-24 추가 ---
-deny 47.251.88.238;   # 중국 Alibaba Cloud
-deny 120.241.79.66;   # 중국
-deny 198.199.104.186; # DigitalOcean — .git/config 스캔
-deny 68.183.229.127;  # DigitalOcean — /login 브루트포스
-deny 211.234.192.199; # 한국 — 고빈도 스캔 48건
-deny 157.143.84.87;   # 스캔 봇 22건
-deny 45.91.64.8;      # 444 차단 7회
-deny 38.43.93.182;    # 위협 2건
-deny 180.65.5.79;     # 공유기 이상 의심
-deny 122.50.1.115;    # CMD_INJECTION — Mozi 봇넷 악성코드 다운로드 시도
-deny 153.66.127.246;  # CMD_INJECTION+BRUTE_FORCE — arm7 악성코드 다운로드 시도
-deny 8.210.246.133;   # PATH_TRAVERSAL+EXPLOIT — CGI /bin/sh 접근 시도
-deny 120.77.206.95;   # PATH_TRAVERSAL+EXPLOIT — CGI /bin/sh 접근 시도
-deny 82.23.235.201;   # EXPLOIT_SCAN — .env 파일 탈취 시도
-deny 20.171.8.157;    # EXPLOIT_SCAN — Spring Actuator 스캔 zgrab
-deny 40.80.200.216;   # EXPLOIT_SCAN — Spring Actuator 스캔 zgrab
-deny 34.171.220.107;  # 수동 차단
+5,000개 이상의 IP를 차단하면서 deny 방식은 성능 저하 우려가 있어 geo 모듈로 전환.
 
-# --- 2026-05-25 추가 (nginx 로그 자동 분석 결과 — 브루트포스/스캐너/위협 탐지 상위) ---
-deny 74.7.227.142;    # 브루트포스 1위(336건) + 스캐너 1위(1878건)
-deny 3.111.168.15;    # 위협 1위(211건) + 스캐너(282건) — AWS India
-deny 179.43.146.226;  # 위협 2위(126건)
-deny 45.88.138.44;    # 위협 3위(61건) + 스캐너(348건)
-deny 216.73.216.159;  # 브루트포스 2위(48건)
+#### geo 모듈 동작 원리
 
-# --- 2026-05-25 추가 (Zyxel ZTP 취약점 스캔 — /ztp/cgi-bin/handle 라우터 원격코드 실행 시도) ---
-deny 81.71.83.149;
-deny 106.52.37.39;
-deny 124.220.48.119;
-deny 49.233.214.187;
-deny 122.51.190.175;
-deny 212.64.21.64;
-deny 106.54.205.179;
-deny 122.51.95.105;
+```
+1. nginx 시작 시 geo_blocklist.conf를 읽어 Radix tree 자료구조로 메모리에 로드
+2. 모든 요청마다 $remote_addr를 트리에서 O(1)으로 조회 → $geo_blocked 변수에 0 또는 1 설정
+3. 각 vhost server 블록에서 if ($geo_blocked) { return 444; } 로 차단
 ```
 
-**IP 추가 방법:**
+#### 설정 구조
+
+`/etc/nginx/conf.d/geo_blocklist.conf` (nginx.conf의 http 블록에서 자동 include):
+```nginx
+geo $geo_blocked {
+    default 0;           # 기본값: 차단 안 함
+    190.2.135.111 1;     # 개별 IP 차단
+    81.71.83.0/24 1;     # CIDR 서브넷 차단 (/24 = 256개 IP 일괄)
+    # ... 5,614개 항목 ...
+}
+```
+
+각 vhost의 server 블록 최상단:
+```nginx
+server {
+    if ($geo_blocked) { return 444; }   # ← 응답 없이 연결 종료
+    server_name feivyblog.bnslab.biz;
+    # ...
+}
+```
+
+> `return 444`는 HTTPS/HTTP 양쪽 server 블록 모두에 적용되어 있음.
+
+#### 기존 blocklist.conf
+
+```nginx
+# blocklist.conf → geo_blocklist.conf로 대체됨
+```
+
+백업: `/etc/nginx/conf.d/blocklist.conf.bak`
+
+#### IP 추가 방법
 
 ```bash
 # MakeSQL 프로젝트에서 SSH 접속
 ssh -i moodle.pem ubuntu@3.34.223.162
 
-# 차단 IP 추가
-echo 'deny <IP주소>;  # 사유 (날짜)' | sudo tee -a /etc/nginx/conf.d/blocklist.conf
+# 개별 IP 차단 추가
+sudo sed -i '/^}/i\    <IP주소> 1;  # 사유 (날짜)' /etc/nginx/conf.d/geo_blocklist.conf
+
+# CIDR 서브넷 차단 추가 (예: /24 = 256개 IP)
+sudo sed -i '/^}/i\    <IP주소>/24 1;  # 사유 (날짜)' /etc/nginx/conf.d/geo_blocklist.conf
+
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
@@ -314,13 +322,16 @@ sudo systemctl restart fail2ban
 인터넷
   │
   ▼
-[Fail2Ban] ── Rate Limit 반복 위반 IP 자동 밴 (iptables)
+[Fail2Ban] ── Rate Limit 반복 위반 IP → iptables 커널 레벨 자동 밴
   │
   ▼
-[Nginx — blocklist.conf] ── 수동 등록 악성 IP 차단 (deny)
-  │
+[Nginx — geo_blocklist.conf] ── 5,614개 IP/서브넷 차단 (geo 모듈, O(1) 조회)
+  │                               $geo_blocked=1 → 444 응답 없이 연결 종료
   ▼
 [Nginx — default server] ── IP 직통 / 미등록 도메인 444 차단
+  │
+  ▼
+[Nginx — AI 봇 차단] ── GPTBot, ChatGPT-User, ClaudeBot → 403
   │
   ▼
 [Nginx — Rate Limit]
@@ -338,7 +349,7 @@ sudo systemctl restart fail2ban
 
 ## 자동 모니터링
 
-MakeSQL 스케줄러가 **매 2시간 :10분**마다 원격 서버 nginx 로그를 수집하여 보안 분석 후 Telegram으로 리포트 전송.
+MakeSQL 스케줄러가 **매 3시간 :10분**마다 원격 서버 nginx 로그를 수집하여 보안 분석 후 Telegram으로 리포트 전송.
 
 분석 항목:
 - 보안 위협 (PATH_TRAVERSAL, SQL_INJECTION, EXPLOIT_SCAN 등 8종)

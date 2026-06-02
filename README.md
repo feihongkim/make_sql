@@ -12,15 +12,19 @@ go build -o abledb .
 
 ```
 ./abledb                                          MongoDB 연결 정보 출력
-./abledb mssql [서버] --dblist                    MSSQL DB 목록
-./abledb mssql [서버] [DB] [쿼리|@파일]            MSSQL 쿼리 실행
-./abledb mongo [연결] [DB] [JSON|@파일]            MongoDB 명령 실행
-./abledb log-analyze [연결] [시간(h)]             MongoDB LOG 분석
-./abledb claude [프로젝트명] [프롬프트|@파일]       로컬 프로젝트 Claude 실행
-./abledb docker-claude [컨테이너명] [프롬프트]     Docker 컨테이너 Claude 실행
-./abledb copy [소스] [소스DB] [대상] [대상DB] ...  데이터 복사
-./abledb security-check                           서버 보안 점검
-./abledb scheduler [status|stop]                 스케줄러 실행/관리
+./abledb mssql [--readonly] [서버] --dblist        MSSQL DB 목록
+./abledb mssql [--readonly] [서버] [DB] [쿼리|@파일] MSSQL 쿼리 실행
+./abledb mongo [연결] --dblist                     MongoDB DB 목록
+./abledb mongo [연결] --drop-before [날짜]          날짜 이전 컬렉션 삭제
+./abledb mongo [연결] [DB] [JSON|@파일]             MongoDB 명령 실행
+./abledb log-analyze [연결] [시간(h)]              MongoDB LOG 분석
+./abledb claude [프로젝트명] [프롬프트|@파일]        로컬 프로젝트 Claude 실행
+./abledb docker-claude [컨테이너명] [프롬프트]      Docker 컨테이너 Claude 실행
+./abledb send [컨테이너명] [프롬프트|@파일]          Docker Claude 세션에 메시지 전송
+./abledb surge-report [YYYYMMDD[-YYYYMMDD]] [옵션]  급등 종목 분석 MD 생성
+./abledb copy [소스] [소스DB] [대상] [대상DB] ...   데이터 복사
+./abledb security-check                            서버 보안 점검
+./abledb scheduler [status|stop]                  스케줄러 실행/관리
 ```
 
 ## 데이터베이스
@@ -35,8 +39,11 @@ go build -o abledb .
 
 `./abledb scheduler` 실행 시 자동으로 주기적 작업을 수행합니다:
 
-- **08:00** — Morning briefing, TODO 복사
-- **3시간마다** — MongoDB 로그 분석, Nginx 로그 분석, 서버 보안 점검
+- **매 3시간 :40** — MongoDB LOG 분석 → Telegram 전송
+- **매 3시간 :10** — Nginx 로그 보안 분석 → Telegram 전송
+- **매 3시간 :30** — 서버 보안 점검 (4대)
+- **매일 15:31** — 급등 종목 MDX 동기화
+- **매시 :17** — Notion 블로그 포스트 동기화
 
 ## 설정 파일
 

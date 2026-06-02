@@ -310,6 +310,58 @@ func RunMSSQLQuery(serverName, dbName, query string) (string, error) {
 	return result, rows.Err()
 }
 
+// QueryMSSQLRows 는 서버의 특정 DB에서 쿼리를 실행하고 결과를 []map[string]string 으로 반환합니다
+func QueryMSSQLRows(serverName, dbName, query string) ([]map[string]string, error) {
+	addr, err := Env.GetMSSQLAddr(serverName)
+	if err != nil {
+		return nil, err
+	}
+
+	connStr := BuildConnStr(addr, dbName)
+	db, err := sql.Open("sqlserver", connStr)
+	if err != nil {
+		return nil, fmt.Errorf("연결 실패: %w", err)
+	}
+	defer db.Close()
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("쿼리 실패: %w", err)
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	values := make([]interface{}, len(cols))
+	valuePtrs := make([]interface{}, len(cols))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	var result []map[string]string
+	for rows.Next() {
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, err
+		}
+		row := make(map[string]string, len(cols))
+		for i, col := range cols {
+			v := values[i]
+			if v == nil {
+				row[col] = ""
+			} else if b, ok := v.([]byte); ok {
+				row[col] = string(b)
+			} else {
+				row[col] = fmt.Sprintf("%v", v)
+			}
+		}
+		result = append(result, row)
+	}
+	return result, rows.Err()
+}
+
 // Close 모든 DB 연결 종료
 func (m *msConn) Close() error {
 	m.lock.Lock()

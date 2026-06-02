@@ -2,7 +2,6 @@ package console
 
 import (
 	"fmt"
-	"log"
 	"os"
 )
 
@@ -40,40 +39,42 @@ func init() {
 	// Step 5: MSSQL 연결 초기화
 	initMsConn()
 
-	// key DB 연결
+	// key DB 연결 (실패 시 경고만, 프로세스 종료 안함)
+	keyOK := true
 	if err := MsConn.EnsureConnection("key"); err != nil {
-		log.Fatalf("key DB 연결 실패: %v", err)
+		LogError("[Init] key DB 연결 실패 (스킵): %v", err)
+		keyOK = false
 	}
 
-	// key DB에서 추가 설정 로드
-	db, err := MsConn.GetDB("key")
-	if err != nil {
-		log.Fatalf("key DB 가져오기 실패: %v", err)
-	}
-
-	configs, err := getDBConfigs(db, "DB")
-	if err != nil {
-		log.Fatalf("DB 설정 가져오기 실패: %v", err)
-	}
-
-	for _, config := range configs {
-		switch config.KEY_NAME {
-		case "ADDR_VAR":
-			EnvVar.MSSQL_ADDR = config.VALUE_DATA
-		case "DBNAME_VAR":
-			EnvVar.MSSQL_DBVar = config.VALUE_DATA
-		case "ADDR_HAN":
-			EnvHan.MSSQL_ADDR = config.VALUE_DATA
-		case "DBNAME_HAN":
-			EnvHan.MSSQL_DBHan = config.VALUE_DATA
-		case "ADDR_KIS":
-			EnvKIS.MSSQL_ADDR = config.VALUE_DATA
-		case "DBNAME_KIS":
-			EnvKIS.MSSQL_DBKIS = config.VALUE_DATA
-		case "ADDR_MONG":
-			EnvMong.Mongo_ADDR = config.VALUE_DATA
-		case "PORT_MONG":
-			EnvMong.Mongo_PORT = config.VALUE_DATA
+	// key DB에서 추가 설정 로드 (key 연결 성공 시에만)
+	if keyOK {
+		db, err := MsConn.GetDB("key")
+		if err == nil {
+			configs, err := getDBConfigs(db, "DB")
+			if err != nil {
+				LogError("[Init] DB 설정 로드 실패 (스킵): %v", err)
+			} else {
+				for _, config := range configs {
+					switch config.KEY_NAME {
+					case "ADDR_VAR":
+						EnvVar.MSSQL_ADDR = config.VALUE_DATA
+					case "DBNAME_VAR":
+						EnvVar.MSSQL_DBVar = config.VALUE_DATA
+					case "ADDR_HAN":
+						EnvHan.MSSQL_ADDR = config.VALUE_DATA
+					case "DBNAME_HAN":
+						EnvHan.MSSQL_DBHan = config.VALUE_DATA
+					case "ADDR_KIS":
+						EnvKIS.MSSQL_ADDR = config.VALUE_DATA
+					case "DBNAME_KIS":
+						EnvKIS.MSSQL_DBKIS = config.VALUE_DATA
+					case "ADDR_MONG":
+						EnvMong.Mongo_ADDR = config.VALUE_DATA
+					case "PORT_MONG":
+						EnvMong.Mongo_PORT = config.VALUE_DATA
+					}
+				}
+			}
 		}
 	}
 
@@ -85,15 +86,11 @@ func init() {
 		EnvKIS.MSSQL_DBKIS = "KIS2"
 	}
 
-	// 나머지 DB 연결
-	if err := MsConn.EnsureConnection("han"); err != nil {
-		log.Fatalf("han DB 연결 실패: %v", err)
-	}
-	if err := MsConn.EnsureConnection("var"); err != nil {
-		log.Fatalf("var DB 연결 실패: %v", err)
-	}
-	if err := MsConn.EnsureConnection("KIS2"); err != nil {
-		log.Fatalf("KIS2 DB 연결 실패: %v", err)
+	// 나머지 DB 연결 (실패 시 경고만, 프로세스 종료 안함)
+	for _, dbname := range []string{"han", "var", "KIS2"} {
+		if err := MsConn.EnsureConnection(dbname); err != nil {
+			LogError("[Init] %s DB 연결 실패 (스킵): %v", dbname, err)
+		}
 	}
 	Log("[Init] MSSQL 연결 초기화 완료")
 
