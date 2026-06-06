@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"MakeSQL/console"
 	"MakeSQL/srv"
 )
 
@@ -19,33 +20,33 @@ import (
 func (s *Scheduler) runNginxAnalyze() {
 	self, err := os.Executable()
 	if err != nil {
-		fmt.Printf("[scheduler] 실행 경로 확인 실패: %v\n", err)
+		console.LogError("[scheduler] 실행 경로 확인 실패: %v", err)
 		return
 	}
 	scriptDir := fmt.Sprintf("%s/nginx_log", getExecDir(self))
 	output := execOutput("bash", []string{scriptDir + "/fetch_and_analyze.sh", "3"})
 	if output == "" {
-		fmt.Println("[scheduler] nginx-analyze 결과 없음")
+		console.Log("[scheduler] nginx-analyze 결과 없음")
 		return
 	}
 	if err := srv.SendTelegramMsg(formatNginxAnalyzeMsg(output)); err != nil {
-		fmt.Printf("[scheduler] 텔레그램 전송 실패: %v\n", err)
+		console.LogError("[scheduler] 텔레그램 전송 실패: %v", err)
 	}
 }
 
 func (s *Scheduler) runLogAnalyze(args []string) {
 	self, err := os.Executable()
 	if err != nil {
-		fmt.Printf("[scheduler] 실행 경로 확인 실패: %v\n", err)
+		console.LogError("[scheduler] 실행 경로 확인 실패: %v", err)
 		return
 	}
 	output := execOutput(self, append([]string{"log-analyze"}, args...))
 	if output == "" {
-		fmt.Println("[scheduler] log-analyze 결과 없음")
+		console.Log("[scheduler] log-analyze 결과 없음")
 		return
 	}
 	if err := srv.SendTelegramMsg(formatLogAnalyzeMsg(output)); err != nil {
-		fmt.Printf("[scheduler] 텔레그램 전송 실패: %v\n", err)
+		console.LogError("[scheduler] 텔레그램 전송 실패: %v", err)
 	}
 }
 
@@ -64,11 +65,18 @@ func (s *Scheduler) runBlogSync() {
 func (s *Scheduler) runSecurityCheck() {
 	output := srv.HandleSecurityCheck()
 	if output == "" {
-		fmt.Println("[scheduler] security-check 결과 없음")
+		console.Log("[scheduler] security-check 결과 없음")
 		return
 	}
-	if err := srv.SendTelegramMsg(output); err != nil {
-		fmt.Printf("[scheduler] 텔레그램 전송 실패: %v\n", err)
+	prompt := "다음 서버 보안 점검 결과를 핵심 이슈 위주로 간결하게 한국어로 요약해줘. 정상 항목은 생략하고 주의/조치 필요한 것만:\n\n" + output
+	summary := execOutput("docker", []string{"exec", "makesql_claude", "claude", "-p", prompt})
+	msg := summary
+	if msg == "" {
+		console.LogError("[scheduler] makesql_claude 요약 실패, 원본 전송")
+		msg = output
+	}
+	if err := srv.SendTelegramMsg(msg); err != nil {
+		console.LogError("[scheduler] 텔레그램 전송 실패: %v", err)
 	}
 }
 
@@ -78,6 +86,10 @@ func (s *Scheduler) runSurgeSync() {
 
 func (s *Scheduler) runTempCheck() {
 	srv.RunTempCheck()
+}
+
+func (s *Scheduler) runTgMonitor() {
+	execOutput("python3", []string{"/home/feihong/code/MakeSQL/python/tg_monitor.py"})
 }
 
 // --- 서브프로세스 ---
@@ -95,12 +107,12 @@ func execOutput(bin string, args []string) string {
 	select {
 	case <-done:
 		if cmdErr != nil {
-			fmt.Printf("[subprocess] 실행 오류: %v\n", cmdErr)
+			console.LogError("[subprocess] 실행 오류: %v", cmdErr)
 		}
 		return string(out)
 	case <-time.After(10 * time.Minute):
 		cmd.Process.Kill()
-		fmt.Println("[subprocess] 타임아웃 (10분)")
+		console.LogError("[subprocess] 타임아웃 (10분)")
 		return ""
 	}
 }

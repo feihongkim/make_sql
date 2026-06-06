@@ -120,7 +120,7 @@ func generateAndSave(server, startDate, endDate, outDir, format string) {
 		fmt.Fprintf(os.Stderr, "파일 저장 실패 %s: %v\n", outPath, err)
 		return
 	}
-	fmt.Printf("저장: %s (%d개 종목)\n", outPath, len(stocks))
+	console.Log("저장: %s (%d개 종목)", outPath, len(stocks))
 }
 
 func deployFiles(outDir, deploy, format string) {
@@ -142,7 +142,7 @@ func deployFiles(outDir, deploy, format string) {
 	pattern := filepath.Join(outDir, ext)
 	matches, err := filepath.Glob(pattern)
 	if err != nil || len(matches) == 0 {
-		fmt.Printf("배포할 파일 없음 (%s)\n", pattern)
+		console.Log("배포할 파일 없음 (%s)", pattern)
 		return
 	}
 
@@ -155,7 +155,7 @@ func deployFiles(outDir, deploy, format string) {
 		fmt.Fprintf(os.Stderr, "배포 실패: %v\n%s\n", err, string(out))
 		return
 	}
-	fmt.Printf("배포 완료: %d개 파일 → %s@%s:%s\n", len(matches), userHost, port, remotePath)
+	console.Log("배포 완료: %d개 파일 → %s@%s:%s", len(matches), userHost, port, remotePath)
 }
 
 func parseSurgeArgs(args []string) (startDate, endDate, outDir, server, format string, all bool, deploy string) {

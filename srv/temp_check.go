@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"MakeSQL/console"
 )
 
 type serverTemp struct {
@@ -18,7 +20,6 @@ type serverTemp struct {
 func RunTempCheck() {
 	results := []serverTemp{
 		getTempLocal("white"),
-		getTempRemote("itwdesk(117)", "feihong", "192.168.3.117", "22"),
 		getTempRemote("tuf(130)", "feihong", "192.168.3.130", "22"),
 		getTempRemote("alvinii(232)", "alvinii", "192.168.3.232", "2222"),
 	}
@@ -58,7 +59,7 @@ func RunTempCheck() {
 	}
 
 	if err := SendTelegramMsg(strings.TrimSpace(b.String())); err != nil {
-		fmt.Printf("[temp_check] 텔레그램 전송 실패: %v\n", err)
+		console.LogError("[temp_check] 텔레그램 전송 실패: %v", err)
 	}
 }
 

@@ -3,7 +3,7 @@
 # 사용법: ./fetch_and_analyze.sh [시간수(기본2)]
 
 HOURS=${1:-2}
-SSH_KEY="$HOME/.ssh/moodle.pem"
+SSH_KEY="$HOME/moodle.pem"
 REMOTE_HOST="ubuntu@3.34.223.162"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TMP_ACCESS="/tmp/nginx_access_$$.log"

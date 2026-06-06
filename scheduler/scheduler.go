@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"MakeSQL/console"
 )
 
 var loc *time.Location
@@ -31,9 +33,10 @@ func BuildSchedule() []Task {
 		{Label: "log_analyze", Every: 3, AtMinute: 40, Commands: []string{"log-analyze", "white", "3"}},
 		{Label: "nginx_analyze", Every: 3, AtMinute: 10, Commands: []string{"nginx-analyze"}},
 		{Label: "security_check", Every: 3, AtMinute: 30, Commands: []string{"security-check"}},
-		{Label: "surge_sync", Time: "15:31", Commands: []string{"surge-sync"}},
+		{Label: "surge_sync", Time: "00:00", Commands: []string{"surge-sync"}},
 		{Label: "blog_sync", Every: 1, AtMinute: 17, Commands: []string{"blog-sync"}},
 		{Label: "temp_check", Every: 3, AtMinute: 50, Commands: []string{"temp-check"}},
+		{Label: "tg_monitor", Every: 1, AtMinute: 5, Commands: []string{"tg-monitor"}},
 	}
 }
 
@@ -74,19 +77,19 @@ func HandleScheduler(args []string) {
 
 func (s *Scheduler) run() {
 	if isSchedulerRunning(s.pidFile) {
-		fmt.Println("[scheduler] 이미 실행 중입니다.")
+		console.Log("[scheduler] 이미 실행 중입니다.")
 		os.Exit(1)
 	}
 	writePID(s.pidFile)
 	defer os.Remove(s.pidFile)
 
-	fmt.Println("[scheduler] 스케줄러 시작")
-	fmt.Println("[scheduler] 등록된 태스크:")
+	console.Log("[scheduler] 스케줄러 시작")
+	console.Log("[scheduler] 등록된 태스크:")
 	for _, t := range s.tasks {
 		if t.Every > 0 {
-			fmt.Printf("  - %s: 매 %d시간 %d분에 실행\n", t.Label, t.Every, t.AtMinute)
+			console.Log("  - %s: 매 %d시간 %d분에 실행", t.Label, t.Every, t.AtMinute)
 		} else {
-			fmt.Printf("  - %s: 매일 %s 실행\n", t.Label, t.Time)
+			console.Log("  - %s: 매일 %s 실행", t.Label, t.Time)
 		}
 	}
 
@@ -94,7 +97,7 @@ func (s *Scheduler) run() {
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		<-sigCh
-		fmt.Println("\n[scheduler] 종료 시그널 수신")
+		console.Log("[scheduler] 종료 시그널 수신")
 		close(s.stopCh)
 	}()
 
@@ -105,7 +108,7 @@ func (s *Scheduler) run() {
 	for {
 		select {
 		case <-s.stopCh:
-			fmt.Println("[scheduler] 스케줄러 종료")
+			console.Log("[scheduler] 스케줄러 종료")
 			return
 		case <-ticker.C:
 			s.tick()
@@ -119,7 +122,7 @@ func (s *Scheduler) tick() {
 	if day != s.today {
 		s.completed = make(map[string]time.Time)
 		s.today = day
-		fmt.Printf("[scheduler] 날짜 변경: %s\n", day)
+		console.Log("[scheduler] 날짜 변경: %s", day)
 	}
 	for _, task := range s.tasks {
 		if s.shouldRun(task, now) {
@@ -155,7 +158,7 @@ func (s *Scheduler) completedKey(task Task, now time.Time) string {
 func (s *Scheduler) dispatch(task Task, now time.Time) {
 	key := s.completedKey(task, now)
 	s.completed[key] = now
-	fmt.Printf("[scheduler] [%s] %s 실행 시작\n", now.Format("15:04:05"), task.Label)
+	console.Log("[scheduler] [%s] %s 실행 시작", now.Format("15:04:05"), task.Label)
 	go func() {
 		switch task.Commands[0] {
 		case "nginx-analyze":
@@ -170,10 +173,12 @@ func (s *Scheduler) dispatch(task Task, now time.Time) {
 			s.runBlogSync()
 		case "temp-check":
 			s.runTempCheck()
+		case "tg-monitor":
+			s.runTgMonitor()
 		default:
-			fmt.Printf("[scheduler] 알 수 없는 명령: %s\n", task.Commands[0])
+			console.LogError("[scheduler] 알 수 없는 명령: %s", task.Commands[0])
 		}
-		fmt.Printf("[scheduler] [%s] %s 완료\n", time.Now().In(loc).Format("15:04:05"), task.Label)
+		console.Log("[scheduler] [%s] %s 완료", time.Now().In(loc).Format("15:04:05"), task.Label)
 	}()
 }
 
@@ -223,9 +228,9 @@ func schedulerStatus() {
 	pidFile := "test_logs/scheduler.pid"
 	if isSchedulerRunning(pidFile) {
 		pid, _ := readPID(pidFile)
-		fmt.Printf("[scheduler] 실행 중 (PID: %d)\n", pid)
+		console.Log("[scheduler] 실행 중 (PID: %d)", pid)
 	} else {
-		fmt.Println("[scheduler] 실행 중이 아닙니다.")
+		console.Log("[scheduler] 실행 중이 아닙니다.")
 	}
 }
 
@@ -233,17 +238,17 @@ func schedulerStop() {
 	pidFile := "test_logs/scheduler.pid"
 	pid, err := readPID(pidFile)
 	if err != nil {
-		fmt.Println("[scheduler] PID 파일을 찾을 수 없습니다.")
+		console.LogError("[scheduler] PID 파일을 찾을 수 없습니다.")
 		return
 	}
 	proc, err := os.FindProcess(pid)
 	if err != nil {
-		fmt.Println("[scheduler] 프로세스를 찾을 수 없습니다.")
+		console.LogError("[scheduler] 프로세스를 찾을 수 없습니다.")
 		return
 	}
 	if err := proc.Signal(syscall.SIGTERM); err != nil {
-		fmt.Printf("[scheduler] 종료 시그널 전송 실패: %v\n", err)
+		console.LogError("[scheduler] 종료 시그널 전송 실패: %v", err)
 		return
 	}
-	fmt.Printf("[scheduler] PID %d에 종료 시그널 전송 완료\n", pid)
+	console.Log("[scheduler] PID %d에 종료 시그널 전송 완료", pid)
 }

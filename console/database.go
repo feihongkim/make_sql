@@ -37,7 +37,7 @@ func BuildConnStr(serverAddr, database string) string {
 }
 
 // ConnectMSSQL 은 서버이름과 DB이름으로 직접 연결합니다
-// dbKey 형식: "서버이름:DB이름" (예: "ITWdesk:mydb")
+// dbKey 형식: "서버이름:DB이름" (예: "TUF:mydb")
 func (m *msConn) ConnectMSSQL(serverName, database string) error {
 	addr, err := Env.GetMSSQLAddr(serverName)
 	if err != nil {
@@ -53,9 +53,6 @@ func (m *msConn) initDB(dbname string) error {
 	var connStr string
 
 	switch dbname {
-	case "key":
-		// 첫 번째 등록된 MSSQL 서버의 DBKEY에 연결
-		connStr = BuildConnStr(Env.FirstMSSQLAddr(), Env.MSSQL_DBKEY)
 	case "han":
 		connStr = BuildConnStr(EnvHan.MSSQL_ADDR, EnvHan.MSSQL_DBHan)
 	case "var":

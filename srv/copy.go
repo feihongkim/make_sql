@@ -31,8 +31,8 @@ func HandleCopy(ctx context.Context, args []string) {
 		fmt.Println("  ./abledb copy [소스서버] [소스DB] [대상서버] [대상DB] [테이블] [WHERE조건]")
 		fmt.Println("  ./abledb copy --upsert [소스서버] [소스DB] [대상서버] [대상DB] [테이블] [WHERE조건] [PK컬럼(콤마구분)]")
 		fmt.Println("예:")
-		fmt.Println("  ./abledb copy ITWdesk hannam white hannam stock_price_kor_d001 \"DATE > '20260306'\"")
-		fmt.Println("  ./abledb copy --upsert ITWdesk hannam white hannam stock_code \"1=1\" \"COUNTRY,MARKET,SHCODE\"")
+		fmt.Println("  ./abledb copy TUF hannam white hannam stock_price_kor_d001 \"DATE > '20260306'\"")
+		fmt.Println("  ./abledb copy --upsert TUF hannam white hannam stock_code \"1=1\" \"COUNTRY,MARKET,SHCODE\"")
 		os.Exit(1)
 	}
 

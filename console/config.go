@@ -25,7 +25,7 @@ type EnvType struct {
 	MSSQL_PORT     string `yaml:"MSSQL_PORT"`
 	MSSQL_USER     string `yaml:"MSSQL_USER"`
 	MSSQL_PASSWORD string `yaml:"MSSQL_PASSWORD"`
-	MSSQL_DBKEY    string `yaml:"MSSQL_DBKEY"`
+
 
 	// MSSQL 서버 주소 (서버이름 → 복호화된 주소)
 	MSSQLAddrs map[string]string `yaml:"-"`
@@ -156,8 +156,6 @@ func loadConfig() error {
 	Env.MSSQL_USER = GetDecode(Env.MSSQL_USER, mainKey)
 	Env.MSSQL_PASSWORD = GetDecode(Env.MSSQL_PASSWORD, mainKey)
 	Env.MSSQL_PORT = GetDecode(Env.MSSQL_PORT, mainKey)
-	Env.MSSQL_DBKEY = GetDecode(Env.MSSQL_DBKEY, mainKey)
-
 	// MSSQL_ADDR_서버이름 복호화
 	Env.MSSQLAddrs = make(map[string]string)
 	for key, val := range rawMap {

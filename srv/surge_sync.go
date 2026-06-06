@@ -28,7 +28,7 @@ func RunSurgeSync() {
 		since,
 	))
 	if err != nil {
-		fmt.Printf("[surge_sync] DB 조회 실패: %v\n", err)
+		console.LogError("[surge_sync] DB 조회 실패: %v", err)
 		return
 	}
 
@@ -37,7 +37,7 @@ func RunSurgeSync() {
 	tmpDir := fmt.Sprintf("/tmp/surge_sync_%s", time.Now().Format("20060102150405"))
 	defer os.RemoveAll(tmpDir)
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {
-		fmt.Printf("[surge_sync] 임시 디렉토리 생성 실패: %v\n", err)
+		console.LogError("[surge_sync] 임시 디렉토리 생성 실패: %v", err)
 		return
 	}
 
@@ -52,7 +52,7 @@ func RunSurgeSync() {
 	}
 
 	if len(generated) == 0 {
-		fmt.Println("[surge_sync] 누락 파일 없음 — 동기화 완료")
+		console.Log("[surge_sync] 누락 파일 없음 — 동기화 완료")
 		return
 	}
 
@@ -62,7 +62,7 @@ func RunSurgeSync() {
 	msg := fmt.Sprintf("[surge_sync] %d개 MDX 신규 배포: %s", len(generated), strings.Join(generated, ", "))
 	fmt.Println(msg)
 	if err := SendTelegramMsg(msg); err != nil {
-		fmt.Printf("[surge_sync] 텔레그램 전송 실패: %v\n", err)
+		console.LogError("[surge_sync] 텔레그램 전송 실패: %v", err)
 	}
 }
 
@@ -79,7 +79,7 @@ func listRemoteFiles() map[string]bool {
 
 	result := make(map[string]bool)
 	if err != nil {
-		fmt.Printf("[surge_sync] 원격 파일 목록 조회 실패: %v\n", err)
+		console.LogError("[surge_sync] 원격 파일 목록 조회 실패: %v", err)
 		return result
 	}
 	for _, line := range strings.Split(string(out), "\n") {

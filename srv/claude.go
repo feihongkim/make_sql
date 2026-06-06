@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"MakeSQL/console"
 	"gopkg.in/yaml.v3"
 )
 
@@ -60,7 +61,7 @@ func HandleClaude(ctx context.Context, args []string) {
 	// 프로젝트 설정 로드
 	cfg, err := loadClaudeProjects()
 	if err != nil {
-		fmt.Printf("설정 로드 실패: %v\n", err)
+		console.LogError("설정 로드 실패: %v", err)
 		os.Exit(1)
 	}
 
@@ -90,13 +91,13 @@ func HandleClaude(ctx context.Context, args []string) {
 	// 프롬프트 조합 (@파일 지원)
 	prompt, err := buildPrompt(promptArgs)
 	if err != nil {
-		fmt.Printf("프롬프트 처리 실패: %v\n", err)
+		console.LogError("프롬프트 처리 실패: %v", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("[claude] 프로젝트: %s (%s)\n", projectName, projectDir)
-	fmt.Printf("[claude] 프롬프트: %s\n", truncate(prompt, 100))
-	fmt.Println("[claude] 실행 중...")
+	console.Log("[claude] 프로젝트: %s (%s)", projectName, projectDir)
+	console.Log("[claude] 프롬프트: %s", truncate(prompt, 100))
+	console.Log("[claude] 실행 중...")
 
 	// claude 실행
 	cmd := exec.CommandContext(ctx,
@@ -108,7 +109,7 @@ func HandleClaude(ctx context.Context, args []string) {
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		fmt.Printf("[claude] 실행 오류: %v\n", err)
+		console.LogError("[claude] 실행 오류: %v", err)
 		if len(out) > 0 {
 			fmt.Println(string(out))
 		}
@@ -161,13 +162,13 @@ func HandleDockerClaude(ctx context.Context, args []string) {
 
 	prompt, err := buildPrompt(promptArgs)
 	if err != nil {
-		fmt.Printf("프롬프트 처리 실패: %v\n", err)
+		console.LogError("프롬프트 처리 실패: %v", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("[docker-claude] 컨테이너: %s\n", containerName)
-	fmt.Printf("[docker-claude] 프롬프트: %s\n", truncate(prompt, 100))
-	fmt.Println("[docker-claude] 실행 중...")
+	console.Log("[docker-claude] 컨테이너: %s", containerName)
+	console.Log("[docker-claude] 프롬프트: %s", truncate(prompt, 100))
+	console.Log("[docker-claude] 실행 중...")
 
 	cmd := exec.CommandContext(ctx,
 		"docker", "exec", "-u", "node", containerName,
@@ -177,7 +178,7 @@ func HandleDockerClaude(ctx context.Context, args []string) {
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		fmt.Printf("[docker-claude] 실행 오류: %v\n", err)
+		console.LogError("[docker-claude] 실행 오류: %v", err)
 		if len(out) > 0 {
 			fmt.Println(string(out))
 		}
@@ -207,13 +208,13 @@ func HandleSend(ctx context.Context, args []string) {
 
 	prompt, err := buildPrompt(promptArgs)
 	if err != nil {
-		fmt.Printf("프롬프트 처리 실패: %v\n", err)
+		console.LogError("프롬프트 처리 실패: %v", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("[send] 컨테이너: %s\n", containerName)
-	fmt.Printf("[send] 프롬프트: %s\n", truncate(prompt, 100))
-	fmt.Println("[send] 실행 중 (기존 Telegram 세션 보호)...")
+	console.Log("[send] 컨테이너: %s", containerName)
+	console.Log("[send] 프롬프트: %s", truncate(prompt, 100))
+	console.Log("[send] 실행 중 (기존 Telegram 세션 보호)...")
 
 	// /workspace/.claude/settings.local.json 에 Telegram 명시적 비활성화 후 실행
 	// claude -p 종료 후 원래 settings.local.json 복원
@@ -244,7 +245,7 @@ SETTINGS
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		fmt.Printf("[send] 실행 오류: %v\n", err)
+		console.LogError("[send] 실행 오류: %v", err)
 		if len(out) > 0 {
 			fmt.Println(string(out))
 		}

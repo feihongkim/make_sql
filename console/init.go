@@ -39,45 +39,6 @@ func init() {
 	// Step 5: MSSQL 연결 초기화
 	initMsConn()
 
-	// key DB 연결 (실패 시 경고만, 프로세스 종료 안함)
-	keyOK := true
-	if err := MsConn.EnsureConnection("key"); err != nil {
-		LogError("[Init] key DB 연결 실패 (스킵): %v", err)
-		keyOK = false
-	}
-
-	// key DB에서 추가 설정 로드 (key 연결 성공 시에만)
-	if keyOK {
-		db, err := MsConn.GetDB("key")
-		if err == nil {
-			configs, err := getDBConfigs(db, "DB")
-			if err != nil {
-				LogError("[Init] DB 설정 로드 실패 (스킵): %v", err)
-			} else {
-				for _, config := range configs {
-					switch config.KEY_NAME {
-					case "ADDR_VAR":
-						EnvVar.MSSQL_ADDR = config.VALUE_DATA
-					case "DBNAME_VAR":
-						EnvVar.MSSQL_DBVar = config.VALUE_DATA
-					case "ADDR_HAN":
-						EnvHan.MSSQL_ADDR = config.VALUE_DATA
-					case "DBNAME_HAN":
-						EnvHan.MSSQL_DBHan = config.VALUE_DATA
-					case "ADDR_KIS":
-						EnvKIS.MSSQL_ADDR = config.VALUE_DATA
-					case "DBNAME_KIS":
-						EnvKIS.MSSQL_DBKIS = config.VALUE_DATA
-					case "ADDR_MONG":
-						EnvMong.Mongo_ADDR = config.VALUE_DATA
-					case "PORT_MONG":
-						EnvMong.Mongo_PORT = config.VALUE_DATA
-					}
-				}
-			}
-		}
-	}
-
 	// KIS DB 설정 미등록 시 han과 동일 서버 사용
 	if EnvKIS.MSSQL_ADDR == "" {
 		EnvKIS.MSSQL_ADDR = EnvHan.MSSQL_ADDR
