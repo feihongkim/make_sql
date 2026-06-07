@@ -89,7 +89,7 @@ func (s *Scheduler) runTempCheck() {
 }
 
 func (s *Scheduler) runTgMonitor() {
-	execOutput("docker", []string{"exec", "makesql_claude", "python3", "/workspace/python/tg_monitor.py"})
+	execOutput("/home/feihong/code/MakeSQL/python/.venv/bin/python3", []string{"/home/feihong/code/MakeSQL/python/tg_monitor.py"})
 }
 
 // --- 서브프로세스 ---

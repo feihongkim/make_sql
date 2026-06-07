@@ -27,3 +27,4 @@ mcp/notion/
 # 로그
 nginx_log/
 test_logs/
+python/.venv/
