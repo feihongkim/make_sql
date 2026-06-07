@@ -52,7 +52,7 @@ func (s *Scheduler) runLogAnalyze(args []string) {
 
 func (s *Scheduler) runBlogSync() {
 	output := execOutput(
-		"/home/feihong/anaconda3/envs/blog/bin/python3",
+		"/home/feihong/code/blog/.venv/bin/python3",
 		[]string{"/home/feihong/code/blog/main.py", "post", "sync"},
 	)
 	f, err := os.OpenFile("/home/feihong/code/blog/sync.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -89,7 +89,7 @@ func (s *Scheduler) runTempCheck() {
 }
 
 func (s *Scheduler) runTgMonitor() {
-	execOutput("python3", []string{"/home/feihong/code/MakeSQL/python/tg_monitor.py"})
+	execOutput("docker", []string{"exec", "makesql_claude", "python3", "/workspace/python/tg_monitor.py"})
 }
 
 // --- 서브프로세스 ---
