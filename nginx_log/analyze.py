@@ -111,10 +111,14 @@ def detect_server(path: str, referer: str) -> str:
             ref_host = urlparse(referer).hostname or ""
         except Exception:
             pass
-    if "tems.bnslab.biz" in ref_host:
+    if ref_host in ("tems.bnslab.biz", "lms.theoed.org"):
         return "moodle"
-    if "feivyblog.bnslab.biz" in ref_host:
+    if ref_host == "feivyblog.bnslab.biz":
         return "feivyblog"
+    if ref_host in ("www.theoed.org", "theoed.org"):
+        return "theoed"
+    if ref_host in ("www.bnslab.biz", "bnslab.biz"):
+        return "bnslab"
     if MOODLE_PATHS.match(path):
         return "moodle"
     if BLOG_PATHS.match(path):
@@ -234,7 +238,7 @@ def parse_error_logs(files: list[Path], since: datetime | None) -> tuple[list[di
 
 def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict],
             f2b: list[dict], hours: int | None) -> dict:
-    servers = ["feivyblog", "moodle", "unknown"]
+    servers = ["feivyblog", "moodle", "theoed", "bnslab", "unknown"]
     total = len(access)
 
     ips_per_server: dict[str, set] = defaultdict(set)
