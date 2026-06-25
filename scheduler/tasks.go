@@ -92,7 +92,48 @@ func (s *Scheduler) runTgMonitor() {
 	execOutput("/home/feihong/code/MakeSQL/python/.venv/bin/python3", []string{"/home/feihong/code/MakeSQL/python/tg_monitor.py"})
 }
 
+func (s *Scheduler) runYoutubeList() {
+	execOutputDir("/home/feihong/code/youtubeList", "/home/feihong/code/youtubeList/youtubeList", nil)
+}
+
+func (s *Scheduler) runTopReasonAnalyze() {
+	execOutputDir("/home/feihong/code/StockTopReason", "/home/feihong/code/StockTopReason/TopReason_Hope", []string{"--mode", "all"})
+}
+
+func (s *Scheduler) runYoutubeContent() {
+	execOutput("ssh", []string{
+		"-o", "ConnectTimeout=10",
+		"-o", "StrictHostKeyChecking=no",
+		"feivy@100.124.181.80",
+		`Set-Location C:\Users\feivy\code\youtubeContent; .\youtubeContent.exe`,
+	})
+}
+
 // --- 서브프로세스 ---
+
+func execOutputDir(dir, bin string, args []string) string {
+	cmd := exec.Command(bin, args...)
+	cmd.Dir = dir
+	cmd.Stderr = os.Stderr
+	done := make(chan error, 1)
+	var out []byte
+	var cmdErr error
+	go func() {
+		out, cmdErr = cmd.Output()
+		done <- cmdErr
+	}()
+	select {
+	case <-done:
+		if cmdErr != nil {
+			console.LogError("[subprocess] 실행 오류: %v", cmdErr)
+		}
+		return string(out)
+	case <-time.After(10 * time.Minute):
+		cmd.Process.Kill()
+		console.LogError("[subprocess] 타임아웃 (10분)")
+		return ""
+	}
+}
 
 func execOutput(bin string, args []string) string {
 	cmd := exec.Command(bin, args...)
@@ -177,13 +218,8 @@ func formatNginxAnalyzeMsg(jsonStr string) string {
 		}
 		if len(r.Security.ThreatTopIPs) > 0 {
 			b.WriteString("  위협 IP: ")
-			i := 0
 			for ip, cnt := range r.Security.ThreatTopIPs {
-				if i >= 3 {
-					break
-				}
 				b.WriteString(fmt.Sprintf("%s(%d) ", ip, cnt))
-				i++
 			}
 			b.WriteString("\n")
 		}

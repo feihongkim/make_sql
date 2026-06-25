@@ -320,20 +320,20 @@ func renderSurgeBody(stocks []surgeStock, startDate, endDate string) string {
 		b.WriteString(fmt.Sprintf("\n## %d. %s (%s) — +%s%%\n\n", i+1, s.Name, s.Code, s.SurgeRate))
 
 		b.WriteString("### 요약\n")
-		b.WriteString(s.Summary + "\n")
+		b.WriteString(escapeMDX(s.Summary) + "\n")
 
 		if len(s.Details) > 0 {
 			b.WriteString("\n### 상세 분석\n")
 			for j, d := range s.Details {
 				b.WriteString(fmt.Sprintf("\n#### %d. %s `영향도: %s`\n", j+1, d.Category, d.Impact))
 				if d.Detail != "" {
-					b.WriteString("　" + d.Detail + "\n") // 전각 공백 1개
+					b.WriteString("　" + escapeMDX(d.Detail) + "\n") // 전각 공백 1개
 				}
 				if len(d.Sources) > 0 {
 					b.WriteString("\n")
 					for _, src := range d.Sources {
 						if src != "" {
-							b.WriteString(fmt.Sprintf("- %s\n", src))
+							b.WriteString(fmt.Sprintf("- %s\n", escapeMDX(src)))
 						}
 					}
 				}
@@ -343,7 +343,7 @@ func renderSurgeBody(stocks []surgeStock, startDate, endDate string) string {
 		if len(s.WatchPoints) > 0 {
 			b.WriteString("\n### 모니터링 포인트\n")
 			for k, wp := range s.WatchPoints {
-				b.WriteString(fmt.Sprintf("%d. %s\n", k+1, wp))
+				b.WriteString(fmt.Sprintf("%d. %s\n", k+1, escapeMDX(wp)))
 			}
 		}
 
@@ -352,6 +352,13 @@ func renderSurgeBody(stocks []surgeStock, startDate, endDate string) string {
 
 	b.WriteString(fmt.Sprintf("\n*생성: ./abledb surge-report, %s*\n", time.Now().Format("2006-01-02")))
 	return b.String()
+}
+
+// escapeMDX 는 MDX/JSX 파싱 오류를 유발하는 < > 를 HTML 엔티티로 치환한다.
+func escapeMDX(s string) string {
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
 }
 
 // formatDate YYYYMMDD → YYYY.MM.DD

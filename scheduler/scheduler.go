@@ -37,6 +37,13 @@ func BuildSchedule() []Task {
 		{Label: "blog_sync", Every: 1, AtMinute: 17, Commands: []string{"blog-sync"}},
 		{Label: "temp_check", Every: 3, AtMinute: 50, Commands: []string{"temp-check"}},
 		{Label: "tg_monitor", Every: 1, AtMinute: 5, Commands: []string{"tg-monitor"}},
+		{Label: "youtube_list_07", Time: "07:01", Commands: []string{"youtube-list"}},
+		{Label: "youtube_list_15", Time: "15:01", Commands: []string{"youtube-list"}},
+		{Label: "youtube_list_22", Time: "22:01", Commands: []string{"youtube-list"}},
+		{Label: "youtube_content_07", Time: "07:05", Commands: []string{"youtube-content"}},
+		{Label: "youtube_content_15", Time: "15:05", Commands: []string{"youtube-content"}},
+		{Label: "youtube_content_22", Time: "22:05", Commands: []string{"youtube-content"}},
+		{Label: "topreason_analyze", Time: "21:00", Commands: []string{"topreason-analyze"}},
 	}
 }
 
@@ -175,6 +182,12 @@ func (s *Scheduler) dispatch(task Task, now time.Time) {
 			s.runTempCheck()
 		case "tg-monitor":
 			s.runTgMonitor()
+		case "youtube-list":
+			s.runYoutubeList()
+		case "youtube-content":
+			s.runYoutubeContent()
+		case "topreason-analyze":
+			s.runTopReasonAnalyze()
 		default:
 			console.LogError("[scheduler] 알 수 없는 명령: %s", task.Commands[0])
 		}

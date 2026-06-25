@@ -76,13 +76,14 @@ func HandleSecurityCheck() string {
 		}
 		report.WriteString(fmt.Sprintf("[고CPU] %s\n", highCPU))
 
-		failedLogin := runOnTarget(t, "sudo lastb 2>/dev/null | head -5 || lastb 2>/dev/null | head -5")
+		since := time.Now().AddDate(0, 0, -3).Format("2006-01-02")
+		failedLogin := runOnTarget(t, fmt.Sprintf("sudo lastb --since %s 2>/dev/null | grep -v '^$' | head -10 || lastb --since %s 2>/dev/null | grep -v '^$' | head -10", since, since))
 		if failedLogin == "" {
 			failedLogin = "없음"
 		}
 		report.WriteString(fmt.Sprintf("[로그인실패] %s\n", failedLogin))
 
-		execFiles := runOnTarget(t, `find /tmp /var/tmp -type f -perm /111 2>/dev/null | grep -v -E '(node_modules|xfs-|yarn|npm|\.bun)' | head -10`)
+		execFiles := runOnTarget(t, `find /tmp /var/tmp -type f -perm /111 2>/dev/null | grep -v -E '(node_modules|xfs-|yarn|npm|\.bun|go-build)' | head -10`)
 		if execFiles == "" {
 			execFiles = "없음"
 		}

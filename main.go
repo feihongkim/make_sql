@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"MakeSQL/console"
@@ -70,6 +71,30 @@ func main() {
 		srv.RunTempCheck()
 	case "security-check":
 		fmt.Println(srv.HandleSecurityCheck())
+	case "sonar":
+		if len(subArgs) == 0 {
+			fmt.Println("사용법: ./abledb sonar [--pro|--reasoning] <검색 질문>")
+			os.Exit(1)
+		}
+		model := "sonar"
+		if subArgs[0] == "--pro" {
+			model = "sonar-pro"
+			subArgs = subArgs[1:]
+		} else if subArgs[0] == "--reasoning" {
+			model = "sonar-reasoning-pro"
+			subArgs = subArgs[1:]
+		}
+		if len(subArgs) == 0 {
+			fmt.Println("검색 질문을 입력하세요")
+			os.Exit(1)
+		}
+		query := strings.Join(subArgs, " ")
+		result, err := srv.HandleSonarSearch(model, query)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Sonar 검색 실패: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(result)
 	case "scheduler":
 		cancel() // 스케줄러는 자체 루프로 동작하므로 타임아웃 해제
 		scheduler.HandleScheduler(subArgs)

@@ -41,15 +41,19 @@ func RunTempCheck() {
 		} else if r.cpu >= 65 {
 			cpuIcon = "🟡"
 		}
-		nvmeIcon := "🟢"
-		if r.nvme >= 65 {
-			nvmeIcon = "🔴"
-			warn = true
-		} else if r.nvme >= 58 {
-			nvmeIcon = "🟡"
+		nvmePart := ""
+		if r.nvme > 0 {
+			nvmeIcon := "🟢"
+			if r.nvme >= 65 {
+				nvmeIcon = "🔴"
+				warn = true
+			} else if r.nvme >= 58 {
+				nvmeIcon = "🟡"
+			}
+			nvmePart = fmt.Sprintf("  NVMe %s%.1f°C", nvmeIcon, r.nvme)
 		}
-		b.WriteString(fmt.Sprintf("【%s】CPU %s%.1f°C  NVMe %s%.1f°C\n",
-			r.name, cpuIcon, r.cpu, nvmeIcon, r.nvme))
+		b.WriteString(fmt.Sprintf("【%s】CPU %s%.1f°C%s\n",
+			r.name, cpuIcon, r.cpu, nvmePart))
 	}
 
 	if warn {
@@ -72,7 +76,7 @@ func getTempLocal(name string) serverTemp {
 }
 
 func getTempRemote(name, user, host, port string) serverTemp {
-	cmd := `echo CPU:$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo 0); echo NVME:$(cat /sys/class/hwmon/hwmon*/temp1_input 2>/dev/null | sort -n | tail -1 || echo 0)`
+	cmd := `echo CPU:$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo 0); NVME_TEMP=0; for d in /sys/class/hwmon/hwmon*; do n=$(cat "$d/name" 2>/dev/null); if [ "$n" = "nvme" ]; then t=$(cat "$d/temp1_input" 2>/dev/null); [ "$t" -gt "$NVME_TEMP" ] 2>/dev/null && NVME_TEMP=$t; fi; done; echo NVME:$NVME_TEMP`
 	out, err := exec.Command("ssh",
 		"-p", port,
 		"-o", "StrictHostKeyChecking=no",

@@ -72,12 +72,13 @@ SECURITY_PATTERNS: list[tuple[str, re.Pattern]] = [
         r"account/login|api/auth|api/login)", re.IGNORECASE)),
 ]
 
-# nginx combined log 파싱
+# nginx combined log 파싱 (X-Forwarded-For 필드 선택적 지원)
 LOG_RE = re.compile(
     r'(?P<ip>\S+) \S+ \S+ \[(?P<time>[^\]]+)\] '
     r'"(?P<method>\S+) (?P<path>\S+) \S+" '
     r'(?P<status>\d{3}) (?P<bytes>\d+) '
     r'"(?P<referer>[^"]*)" "(?P<ua>[^"]*)"'
+    r'(?: "(?P<xff>[^"]*)")?'
 )
 # nginx error log 파싱
 ERROR_RE = re.compile(
@@ -159,6 +160,10 @@ def parse_access_logs(files: list[Path], since: datetime | None) -> list[dict]:
                 if since and t and t < since:
                     continue
                 d["dt"] = t
+                # X-Forwarded-For가 있으면 실제 클라이언트 IP로 대체
+                xff = (d.get("xff") or "").strip()
+                if xff and xff != "-":
+                    d["ip"] = xff.split(",")[0].strip()
                 d["server"] = detect_server(d["path"], d["referer"])
                 d["bot"] = bool(BOT_UA_RE.search(d["ua"]))
                 d["status"] = int(d["status"])
@@ -298,7 +303,7 @@ def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict],
         "security": {
             "threat_total": len(threat_records),
             "threat_by_type": dict(threat_by_type.most_common()),
-            "threat_top_ips": dict(threat_by_ip.most_common(10)),
+            "threat_top_ips": dict(threat_by_ip.most_common()),
             "threat_samples": [
                 {
                     "ip": r["ip"],
