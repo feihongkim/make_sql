@@ -95,6 +95,10 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Println(result)
+	case "queue-to-mongo":
+		cancel()
+		srv.HandleQueueToMongo(subArgs)
+		return
 	case "scheduler":
 		cancel() // 스케줄러는 자체 루프로 동작하므로 타임아웃 해제
 		scheduler.HandleScheduler(subArgs)
@@ -113,7 +117,7 @@ func main() {
 		fmt.Println("  ./abledb docker-claude [컨테이너명] [프롬프트|@파일] Docker Claude 실행")
 		fmt.Println("  ./abledb send [컨테이너명] [프롬프트|@파일]      Docker Claude 세션에 안전하게 메시지 전송")
 		fmt.Println("  ./abledb surge-report [YYYYMMDD[-YYYYMMDD]] [--out /path] [--server name]  급등 종목 분석 MD 생성")
-		fmt.Println("  ./abledb security-check                      서버 보안 점검 (4대)")
+		fmt.Println("  ./abledb security-check                      서버 보안 점검 (3대)")
 		fmt.Println("  ./abledb scheduler [status|stop]             스케줄러 실행/관리")
 		fmt.Println("  ./abledb copy [소스] [소스DB] [대상] [대상DB] [테이블] [조건]  데이터 복사")
 		os.Exit(1)

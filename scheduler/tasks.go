@@ -96,6 +96,10 @@ func (s *Scheduler) runYoutubeList() {
 	execOutputDir("/home/feihong/code/youtubeList", "/home/feihong/code/youtubeList/youtubeList", nil)
 }
 
+func (s *Scheduler) runQueueToMongo() {
+	srv.RunQueueToMongo(16) // KST 16시에 자동 종료
+}
+
 func (s *Scheduler) runTopReasonAnalyze() {
 	execOutputDir("/home/feihong/code/StockTopReason", "/home/feihong/code/StockTopReason/TopReason_Hope", []string{"--mode", "all"})
 }

@@ -44,6 +44,7 @@ func BuildSchedule() []Task {
 		{Label: "youtube_content_15", Time: "15:05", Commands: []string{"youtube-content"}},
 		{Label: "youtube_content_22", Time: "22:05", Commands: []string{"youtube-content"}},
 		{Label: "topreason_analyze", Time: "21:00", Commands: []string{"topreason-analyze"}},
+		{Label: "queue_to_mongo", Time: "07:50", Commands: []string{"queue-to-mongo"}},
 	}
 }
 
@@ -188,6 +189,8 @@ func (s *Scheduler) dispatch(task Task, now time.Time) {
 			s.runYoutubeContent()
 		case "topreason-analyze":
 			s.runTopReasonAnalyze()
+		case "queue-to-mongo":
+			s.runQueueToMongo()
 		default:
 			console.LogError("[scheduler] 알 수 없는 명령: %s", task.Commands[0])
 		}

@@ -101,7 +101,7 @@ func HandleSecurityCheck() string {
 		}
 		report.WriteString(fmt.Sprintf("[SUID] %s\n", suidFiles))
 
-		listenPorts := runOnTarget(t, `ss -tlnp 2>/dev/null | grep LISTEN | grep -v -E '(127\.0\.0\.1|::1|\*:22|0\.0\.0\.0:22|\[::]:22)' | awk '{print $4,$6}' | head -15 || true`)
+		listenPorts := runOnTarget(t, `ss -tlnp 2>/dev/null | grep LISTEN | grep -v -E '(127\.0\.0\.1|::1|\*:22|0\.0\.0\.0:22|\[::]:22|:27017|:27016|:5432|:3305|:3306|:1433|:5672|:445|:8787|:8888|:8889|:11080|:6379|:15672)' | awk '{print $4,$6}' | head -15 || true`)
 		if listenPorts == "" {
 			listenPorts = "없음"
 		}

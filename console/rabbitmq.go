@@ -262,6 +262,38 @@ func (s *rabbitMQSession) Receive(queueName string, msgChan chan<- []byte) error
 	return nil
 }
 
+// ReceiveManualAck 는 큐에서 메시지를 수신합니다 (수동 ack — 처리 후 Ack 호출 필요)
+func (s *rabbitMQSession) ReceiveManualAck(queueName string, msgChan chan<- amqp.Delivery) error {
+	s.mu.RLock()
+	channel, exists := s.Channels[queueName]
+	s.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("큐 %s의 채널을 찾을 수 없음", queueName)
+	}
+
+	msgs, err := channel.Consume(
+		queueName,
+		"",    // consumer
+		false, // auto-ack = false (수동 ack)
+		false, // exclusive
+		false, // no-local
+		false, // no-wait
+		nil,   // args
+	)
+	if err != nil {
+		return fmt.Errorf("컨슈머 등록 실패: %w", err)
+	}
+
+	go func() {
+		for d := range msgs {
+			msgChan <- d
+		}
+	}()
+
+	return nil
+}
+
 // SendStr 는 문자열 메시지를 큐에 전송하는 간편 함수 (자동 로그 포함)
 func SendStr(queueName string, message string) error {
 	msgBytes := []byte(message)
