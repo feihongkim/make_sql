@@ -137,8 +137,8 @@ func (s *Scheduler) runProcessCheck() {
 		if statusOut != "running" {
 			continue
 		}
-		out := execOutput("docker", []string{"exec", container, "bash", "-c", fmt.Sprintf("ps aux | grep '%s' | grep -v grep", pattern)})
-		if strings.TrimSpace(out) == "" {
+		out := execOutput("docker", []string{"exec", container, "bash", "-c", fmt.Sprintf("cat /proc/*/cmdline 2>/dev/null | tr '\\0' ' ' | grep -q '%s' && echo found || echo notfound", pattern)})
+		if strings.TrimSpace(out) != "found" {
 			issues = append(issues, fmt.Sprintf("컨테이너 [%s] 내부 프로세스 없음: %s", container, pattern))
 		}
 	}
