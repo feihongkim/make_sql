@@ -92,6 +92,108 @@ func (s *Scheduler) runTgMonitor() {
 	execOutput("/home/feihong/code/MakeSQL/python/.venv/bin/python3", []string{"/home/feihong/code/MakeSQL/python/tg_monitor.py"})
 }
 
+// --- 프로세스 감시 (watchdog) ---
+
+// 감시 대상 컨테이너 목록
+var watchContainers = []string{
+	"api_claude", "claude_python_forme", "claude_ticker",
+	"dart_claude", "data3_claude", "dbsender_claude",
+	"jarvis_claude", "kis2_claude", "ls_claude",
+	"makesql_claude", "makesql_main_claude",
+	"mkyoutube_claude", "news_claude", "ontology_claude",
+	"readjson_claude", "restg_claude", "restgo_claude",
+	"rstudio_claude", "saver_claude", "stocktopreason_claude",
+	"system_prompt_claude", "upbit_claude", "youtubecontent_claude",
+}
+
+// 컨테이너 내부 프로세스 감시 대상 {컨테이너명: 프로세스 패턴}
+var watchInternalProcesses = map[string]string{
+	"kis2_claude": "./KIS scheduler",
+}
+
+// 호스트 프로세스 감시 대상
+var watchHostProcesses = []string{
+	"abledb_Hope scheduler",
+}
+
+// 이전 알림 상태 (중복 방지)
+var lastAlertState = make(map[string]bool)
+
+func (s *Scheduler) runProcessCheck() {
+	var issues []string
+
+	// 1. Docker 컨테이너 running 여부 확인
+	for _, name := range watchContainers {
+		out := strings.TrimSpace(execOutput("docker", []string{"inspect", name, "--format", "{{.State.Status}}"}))
+		if out != "running" {
+			issues = append(issues, fmt.Sprintf("컨테이너 [%s] 중단됨 (상태: %s)", name, out))
+		}
+	}
+
+	// 2. 컨테이너 내부 프로세스 확인
+	for container, pattern := range watchInternalProcesses {
+		// 컨테이너가 running이 아니면 이미 위에서 잡힘
+		statusOut := strings.TrimSpace(execOutput("docker", []string{"inspect", container, "--format", "{{.State.Status}}"}))
+		if statusOut != "running" {
+			continue
+		}
+		out := execOutput("docker", []string{"exec", container, "bash", "-c", fmt.Sprintf("ps aux | grep '%s' | grep -v grep", pattern)})
+		if strings.TrimSpace(out) == "" {
+			issues = append(issues, fmt.Sprintf("컨테이너 [%s] 내부 프로세스 없음: %s", container, pattern))
+		}
+	}
+
+	// 3. 호스트 프로세스 확인
+	for _, pattern := range watchHostProcesses {
+		out := execOutput("bash", []string{"-c", fmt.Sprintf("ps aux | grep '%s' | grep -v grep", pattern)})
+		if strings.TrimSpace(out) == "" {
+			issues = append(issues, fmt.Sprintf("호스트 프로세스 없음: %s", pattern))
+		}
+	}
+
+	// 이슈 상태 변화 감지
+	currentKey := strings.Join(issues, "|")
+	prevKey := ""
+	for k, v := range lastAlertState {
+		if v {
+			prevKey = k
+		}
+	}
+
+	if len(issues) == 0 {
+		if prevKey != "" {
+			// 복구됨
+			lastAlertState[prevKey] = false
+			if err := srv.SendTelegramMsg("✅ [프로세스 감시] 모든 이상 복구됨"); err != nil {
+				console.LogError("[scheduler] process-check 텔레그램 전송 실패: %v", err)
+			}
+		}
+		console.Log("[scheduler] process-check: 전체 정상")
+		return
+	}
+
+	// 이전과 동일한 이슈면 알림 생략
+	if currentKey == prevKey {
+		console.Log("[scheduler] process-check: 이전과 동일한 이슈 — 알림 생략")
+		return
+	}
+
+	// 새 이슈 발생
+	lastAlertState[prevKey] = false
+	lastAlertState[currentKey] = true
+
+	var msg strings.Builder
+	msg.WriteString(fmt.Sprintf("⚠️ [프로세스 감시] %d건 이상 감지\n\n", len(issues)))
+	for _, issue := range issues {
+		msg.WriteString("• " + issue + "\n")
+	}
+	msg.WriteString(fmt.Sprintf("\n점검 시각: %s", time.Now().In(loc).Format("2006-01-02 15:04 KST")))
+
+	if err := srv.SendTelegramMsg(msg.String()); err != nil {
+		console.LogError("[scheduler] process-check 텔레그램 전송 실패: %v", err)
+	}
+}
+
 func (s *Scheduler) runYoutubeList() {
 	execOutputDir("/home/feihong/code/youtubeList", "/home/feihong/code/youtubeList/youtubeList", nil)
 }
