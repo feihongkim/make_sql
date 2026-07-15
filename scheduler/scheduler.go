@@ -32,11 +32,11 @@ func BuildSchedule() []Task {
 	return []Task{
 		{Label: "log_analyze", Every: 3, AtMinute: 40, Commands: []string{"log-analyze", "white", "3"}},
 		{Label: "nginx_analyze", Every: 3, AtMinute: 10, Commands: []string{"nginx-analyze"}},
-		{Label: "security_check", Every: 3, AtMinute: 30, Commands: []string{"security-check"}},
+		{Label: "security_check_morning", Time: "08:00", Commands: []string{"security-check"}},
+		{Label: "security_check_evening", Time: "20:00", Commands: []string{"security-check"}},
 		{Label: "surge_sync", Time: "00:00", Commands: []string{"surge-sync"}},
 		{Label: "blog_sync", Every: 1, AtMinute: 17, Commands: []string{"blog-sync"}},
 		{Label: "temp_check", Every: 3, AtMinute: 50, Commands: []string{"temp-check"}},
-		{Label: "tg_monitor", Every: 1, AtMinute: 5, Commands: []string{"tg-monitor"}},
 		{Label: "youtube_list_07", Time: "07:01", Commands: []string{"youtube-list"}},
 		{Label: "youtube_list_15", Time: "15:01", Commands: []string{"youtube-list"}},
 		{Label: "youtube_list_22", Time: "22:01", Commands: []string{"youtube-list"}},
@@ -45,6 +45,7 @@ func BuildSchedule() []Task {
 		{Label: "youtube_content_22", Time: "22:05", Commands: []string{"youtube-content"}},
 		{Label: "topreason_analyze", Time: "21:00", Commands: []string{"topreason-analyze"}},
 		{Label: "queue_to_mongo", Time: "07:50", Commands: []string{"queue-to-mongo"}},
+		{Label: "code_backup", Time: "03:00", Commands: []string{"code-backup"}},
 		{Label: "process_check", Every: 1, AtMinute: 0, Commands: []string{"process-check"}},
 	}
 }
@@ -182,8 +183,6 @@ func (s *Scheduler) dispatch(task Task, now time.Time) {
 			s.runBlogSync()
 		case "temp-check":
 			s.runTempCheck()
-		case "tg-monitor":
-			s.runTgMonitor()
 		case "youtube-list":
 			s.runYoutubeList()
 		case "youtube-content":
@@ -192,6 +191,8 @@ func (s *Scheduler) dispatch(task Task, now time.Time) {
 			s.runTopReasonAnalyze()
 		case "queue-to-mongo":
 			s.runQueueToMongo()
+		case "code-backup":
+			s.runCodeBackup()
 		case "process-check":
 			s.runProcessCheck()
 		default:

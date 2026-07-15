@@ -20,6 +20,7 @@ type serverTemp struct {
 func RunTempCheck() {
 	results := []serverTemp{
 		getTempLocal("white"),
+		getTempRemote("feisa(10)", "feihong", "192.168.3.10", "22"),
 		getTempRemote("tuf(130)", "feihong", "192.168.3.130", "22"),
 		getTempRemote("alvinii(232)", "alvinii", "192.168.3.232", "2222"),
 	}

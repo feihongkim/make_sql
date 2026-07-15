@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	telegramBotToken = "8566536179:AAE-Ssa7cY17DrnnQIhdPHGBeD24i9g_oO8"
+	telegramBotToken = "8707979862:AAGufPfoD7M0h4L0E2Ct4JzFTJK-4mvz63s"
 	telegramChatID   = "7723743534"
 )
 

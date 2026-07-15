@@ -41,7 +41,12 @@ func init() {
 
 	// KIS DB 설정 미등록 시 han과 동일 서버 사용
 	if EnvKIS.MSSQL_ADDR == "" {
-		EnvKIS.MSSQL_ADDR = EnvHan.MSSQL_ADDR
+		// KIS2는 TUF 서버에 있으므로 TUF 주소 사용
+		if addr, ok := Env.MSSQLAddrs["TUF"]; ok {
+			EnvKIS.MSSQL_ADDR = addr
+		} else {
+			EnvKIS.MSSQL_ADDR = EnvHan.MSSQL_ADDR
+		}
 	}
 	if EnvKIS.MSSQL_DBKIS == "" {
 		EnvKIS.MSSQL_DBKIS = "KIS2"

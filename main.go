@@ -34,7 +34,7 @@ func main() {
 	}
 
 	timeout := 5 * time.Minute
-	if len(os.Args) > 1 && (os.Args[1] == "copy" || os.Args[1] == "log-analyze" || os.Args[1] == "claude" || os.Args[1] == "docker-claude" || os.Args[1] == "send" || os.Args[1] == "surge-report" || os.Args[1] == "surge-sync") {
+	if len(os.Args) > 1 && (os.Args[1] == "copy" || os.Args[1] == "log-analyze" || os.Args[1] == "claude" || os.Args[1] == "docker-claude" || os.Args[1] == "send" || os.Args[1] == "surge-report" || os.Args[1] == "surge-sync" || os.Args[1] == "code-backup") {
 		timeout = 30 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -71,6 +71,8 @@ func main() {
 		srv.RunTempCheck()
 	case "security-check":
 		fmt.Println(srv.HandleSecurityCheck())
+	case "code-backup":
+		srv.RunCodeBackup()
 	case "sonar":
 		if len(subArgs) == 0 {
 			fmt.Println("사용법: ./abledb sonar [--pro|--reasoning] <검색 질문>")

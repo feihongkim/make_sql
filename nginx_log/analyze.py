@@ -241,7 +241,7 @@ def parse_error_logs(files: list[Path], since: datetime | None) -> tuple[list[di
     return errors, rate_limits
 
 
-def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict],
+def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict], blocked_ips: set,
             f2b: list[dict], hours: int | None) -> dict:
     servers = ["feivyblog", "moodle", "theoed", "bnslab", "unknown"]
     total = len(access)
@@ -303,7 +303,8 @@ def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict],
         "security": {
             "threat_total": len(threat_records),
             "threat_by_type": dict(threat_by_type.most_common()),
-            "threat_top_ips": dict(threat_by_ip.most_common()),
+            "threat_top_ips": dict((ip, cnt) for ip, cnt in threat_by_ip.most_common() if ip not in blocked_ips),
+            "threat_blocked_ips": len([ip for ip in threat_by_ip if ip in blocked_ips]),
             "threat_samples": [
                 {
                     "ip": r["ip"],
@@ -364,6 +365,7 @@ def main():
     parser.add_argument("files", nargs="*", help="로그 파일 경로")
     parser.add_argument("--hours", type=int, default=None, help="최근 N시간만 분석")
     parser.add_argument("--json", action="store_true", help="JSON 출력")
+    parser.add_argument("--blocklist", help="geo_blocklist.conf path")
     args = parser.parse_args()
 
     if args.files:
@@ -378,6 +380,17 @@ def main():
         print(f"파일 없음: {missing}", file=sys.stderr)
         sys.exit(1)
 
+    blocked_ips = set()
+    if args.blocklist:
+        try:
+            with open(args.blocklist) as bf:
+                for line in bf:
+                    m = re.match(r'\s*([0-9a-fA-F.:]+(?:/[0-9]+)?)\s+1;', line)
+                    if m:
+                        blocked_ips.add(m.group(1))
+        except Exception:
+            pass
+
     since = None
     if args.hours:
         since = datetime.now(timezone.utc) - timedelta(hours=args.hours)
@@ -386,7 +399,7 @@ def main():
     errors, rate_limits = parse_error_logs(files, since)
     f2b = parse_fail2ban_logs(files, since)
 
-    result = analyze(access, errors, rate_limits, f2b, args.hours)
+    result = analyze(access, errors, rate_limits, blocked_ips, f2b, args.hours)
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))

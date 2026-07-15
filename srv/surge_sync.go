@@ -11,10 +11,10 @@ import (
 )
 
 const (
-	surgeDeployUser   = "alvinii"
-	surgeDeployHost   = "192.168.3.232"
-	surgeDeployPort   = "2222"
-	surgeDeployPath   = "/home/alvinii/code/my-blog/data/blog/StockItems"
+	surgeDeployUser   = "feihong"
+	surgeDeployHost   = "100.122.50.38"
+	surgeDeployPort   = "22"
+	surgeDeployPath   = "/home/feihong/Code/my-blog/data/blog/StockItems"
 	surgeSSHKey       = "/root/.ssh/id_ed25519"
 	surgeLookbackDays = 7
 )

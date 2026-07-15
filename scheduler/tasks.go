@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,6 +14,10 @@ import (
 
 	"MakeSQL/console"
 	"MakeSQL/srv"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // --- Task 구현 ---
@@ -69,10 +74,10 @@ func (s *Scheduler) runSecurityCheck() {
 		return
 	}
 	prompt := "다음 서버 보안 점검 결과를 핵심 이슈 위주로 간결하게 한국어로 요약해줘. 정상 항목은 생략하고 주의/조치 필요한 것만:\n\n" + output
-	summary := execOutput("docker", []string{"exec", "makesql_claude", "claude", "-p", prompt})
+	summary := execOutput("docker", []string{"exec", "makesql_pi", "claude", "-p", prompt})
 	msg := summary
 	if msg == "" {
-		console.LogError("[scheduler] makesql_claude 요약 실패, 원본 전송")
+		console.LogError("[scheduler] makesql_pi 요약 실패, 원본 전송")
 		msg = output
 	}
 	if err := srv.SendTelegramMsg(msg); err != nil {
@@ -96,24 +101,120 @@ func (s *Scheduler) runTgMonitor() {
 
 // 감시 대상 컨테이너 목록
 var watchContainers = []string{
-	"api_claude", "claude_python_forme", "claude_ticker",
-	"dart_claude", "data3_claude", "dbsender_claude",
-	"jarvis_claude", "kis2_claude", "ls_claude",
-	"makesql_claude", "makesql_main_claude",
-	"mkyoutube_claude", "news_claude", "ontology_claude",
-	"readjson_claude", "restg_claude", "restgo_claude",
-	"rstudio_claude", "saver_claude", "stocktopreason_claude",
-	"system_prompt_claude", "upbit_claude", "youtubecontent_claude",
+	"dart_pi", "drawchart_pi", "jarvis_pi", "kis2_pi", "ls_pi",
+	"MC_pi", "pyforme_pi", "pyforme2_pi", "stocktopreason_pi", "youtube_pi",
+	"dbsender_pi", "makesql_pi", "mkyoutube_pi", "news_pi",
+	"ontology_pi", "restgo_pi", "restgo2_pi", "rstudio_pi", "saver_pi", "upbit_pi",
 }
 
 // 컨테이너 내부 프로세스 감시 대상 {컨테이너명: 프로세스 패턴}
 var watchInternalProcesses = map[string]string{
-	"kis2_claude": "./KIS scheduler",
+	"kis2_pi": "./KIS scheduler",
 }
 
 // 호스트 프로세스 감시 대상
 var watchHostProcesses = []string{
 	"abledb_Hope scheduler",
+}
+
+
+// 요일별 필수 LOG 모듈 (월요일은 15시 이후부터 KIS 체크)
+var requiredModules = map[time.Weekday][]string{
+	time.Monday:    {"youtubeContent", "youtubeList", "MakeSQL", "TopReason"},
+	time.Tuesday:   {"KIS", "youtubeContent", "youtubeList", "MakeSQL", "TopReason"},
+	time.Wednesday: {"KIS", "youtubeContent", "youtubeList", "MakeSQL", "TopReason"},
+	time.Thursday:  {"KIS", "youtubeContent", "youtubeList", "MakeSQL", "TopReason"},
+	time.Friday:    {"KIS", "youtubeContent", "youtubeList", "MakeSQL", "TopReason"},
+	time.Saturday:  {"youtubeContent", "youtubeList", "MakeSQL", "TopReason"},
+	time.Sunday:    {"youtubeContent", "youtubeList", "MakeSQL", "TopReason"},
+}
+
+func checkLogModules(now time.Time) []string {
+	var missing []string
+	weekday := now.Weekday()
+	expected, ok := requiredModules[weekday]
+	if !ok {
+		return nil
+	}
+
+	if weekday == time.Monday && now.Hour() < 15 {
+		var filtered []string
+		for _, m := range expected {
+			if m != "KIS" {
+				filtered = append(filtered, m)
+			}
+		}
+		expected = filtered
+	}
+
+	today := now.Format("2006/01/02")
+	console.Log("[process_check] LOG query: today=%s", today)
+
+	present := queryLogModules(today)
+	if present == nil {
+		return []string{"LOG module query failed (MongoDB error)"}
+	}
+
+	for _, mod := range expected {
+		if !present[mod] {
+			missing = append(missing, fmt.Sprintf("LOG 모듈 [%s] 오늘 미출현", mod))
+		}
+	}
+	return missing
+}
+
+func queryLogModules(dateStr string) map[string]bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	uri := "mongodb://white.tail5b4272.ts.net:27016/?retryWrites=true&w=majority"
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri).SetConnectTimeout(5*time.Second).SetSocketTimeout(5*time.Second))
+	if err != nil {
+		console.LogError("[process_check] MongoDB connect failed: %v", err)
+		return nil
+	}
+	defer client.Disconnect(ctx)
+
+	coll := client.Database("LOG").Collection(dateStr)
+
+	pipeline := mongo.Pipeline{
+		{{Key: "$project", Value: bson.D{{Key: "m", Value: bson.D{{Key: "$arrayElemAt", Value: bson.A{bson.D{{Key: "$split", Value: bson.A{"$Msg", "["}}}, 1}}}}}}},
+		{{Key: "$group", Value: bson.D{{Key: "_id", Value: "$m"}}}},
+	}
+
+	cursor, err := coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		console.LogError("[process_check] MongoDB aggregate failed: %v", err)
+		return nil
+	}
+	defer cursor.Close(ctx)
+
+	result := make(map[string]bool)
+	for cursor.Next(ctx) {
+		var doc struct {
+			ID string `bson:"_id"`
+		}
+		if err := cursor.Decode(&doc); err != nil {
+			continue
+		}
+		mod := strings.TrimSuffix(doc.ID, "]")
+		if mod != "" {
+			result[mod] = true
+		}
+	}
+	return result
+}
+
+// execStdin runs docker exec -i API_pi pi -p with the given prompt via stdin
+func execStdin(prompt string) string {
+	cmd := exec.Command("docker", "exec", "-i", "API_pi", "pi", "-p", "--no-session", "--no-tools", "--thinking", "high")
+	cmd.Stdin = strings.NewReader(prompt)
+	out, err := cmd.Output()
+	if err != nil {
+		console.LogError("[execStdin] API_pi error: %v", err)
+		return ""
+	}
+	return string(out)
 }
 
 // 이전 알림 상태 (중복 방지)
@@ -150,6 +251,11 @@ func (s *Scheduler) runProcessCheck() {
 			issues = append(issues, fmt.Sprintf("호스트 프로세스 없음: %s", pattern))
 		}
 	}
+
+	// 4. LOG 모듈 요일별 감시
+	now := time.Now().In(loc)
+	moduleIssues := checkLogModules(now)
+	issues = append(issues, moduleIssues...)
 
 	// 이슈 상태 변화 감지
 	currentKey := strings.Join(issues, "|")
@@ -547,4 +653,8 @@ func commaInt(n int) string {
 		out += string(c)
 	}
 	return out
+}
+
+func (s *Scheduler) runCodeBackup() {
+	srv.RunCodeBackup()
 }

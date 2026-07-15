@@ -9,9 +9,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TMP_ACCESS="/tmp/nginx_access_$$.log"
 TMP_ERROR="/tmp/nginx_error_$$.log"
 TMP_F2B="/tmp/nginx_fail2ban_$$.log"
+TMP_BLOCKLIST="/tmp/nginx_blocklist_$$.conf"
 
 cleanup() {
     rm -f "$TMP_ACCESS" "$TMP_ERROR" "$TMP_F2B"
+    rm -f "$TMP_BLOCKLIST"
 }
 trap cleanup EXIT
 
@@ -26,6 +28,9 @@ $SSH_CMD "cat /var/log/nginx/error.log.1 /var/log/nginx/error.log 2>/dev/null" \
     > "$TMP_ERROR" 2>/dev/null
 
 # fail2ban 로그
+
+# geo_blocklist 가져오기
+$SSH_CMD "cat /etc/nginx/conf.d/geo_blocklist.conf 2>/dev/null" > "$TMP_BLOCKLIST" 2>/dev/null
 $SSH_CMD "sudo cat /var/log/fail2ban.log 2>/dev/null || cat /var/log/fail2ban.log 2>/dev/null" \
     > "$TMP_F2B" 2>/dev/null
 
@@ -36,4 +41,4 @@ fi
 
 # 분석 실행 (JSON 출력)
 python3 "$SCRIPT_DIR/analyze.py" \
-    --hours "$HOURS" --json "$TMP_ACCESS" "$TMP_ERROR" "$TMP_F2B"
+    --hours "$HOURS" --json --blocklist "$TMP_BLOCKLIST" "$TMP_ACCESS" "$TMP_ERROR" "$TMP_F2B"
