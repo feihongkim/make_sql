@@ -20,9 +20,9 @@ type serverTemp struct {
 func RunTempCheck() {
 	results := []serverTemp{
 		getTempLocal("white"),
-		getTempRemote("feisa(10)", "feihong", "192.168.3.10", "22"),
-		getTempRemote("tuf(130)", "feihong", "192.168.3.130", "22"),
-		getTempRemote("alvinii(232)", "alvinii", "192.168.3.232", "2222"),
+		getTempRemote("feisa(10)", "feihong", "100.122.50.38", "22"),
+		getTempRemote("tuf(130)", "feihong", "100.127.179.112", "22"),
+		getTempRemote("alvinii(232)", "alvinii", "100.110.254.111", "2222"),
 	}
 
 	var b strings.Builder
