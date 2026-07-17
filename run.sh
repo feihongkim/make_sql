@@ -12,6 +12,9 @@ CMD=${1:-""}
 LOG_DIR="test_logs"
 mkdir -p "$LOG_DIR"
 
+# Go 환경 변수 설정
+export PATH=$PATH:/usr/local/go/bin
+
 # 1. 빌드
 echo "Building ${BIN_NAME}..."
 go build -o "${BIN_NAME}" . || { echo "Build failed"; exit 1; }

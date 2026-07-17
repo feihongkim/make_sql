@@ -1,6 +1,8 @@
 package scheduler
 
 import (
+	"net/http"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -74,17 +76,15 @@ func (s *Scheduler) runSecurityCheck() {
 		return
 	}
 	prompt := "다음 서버 보안 점검 결과를 핵심 이슈 위주로 간결하게 한국어로 요약해줘. 정상 항목은 생략하고 주의/조치 필요한 것만:\n\n" + output
-	summary := execOutput("docker", []string{"exec", "makesql_pi", "claude", "-p", prompt})
-	msg := summary
-	if msg == "" {
-		console.LogError("[scheduler] makesql_pi 요약 실패, 원본 전송")
-		msg = output
+	summary := execStdin(prompt)
+	if summary == "" {
+		console.LogError("[scheduler] API_pi 요약 실패")
+		if err := srv.SendTelegramMsg(output); err != nil {
+			console.LogError("[scheduler] 텔레그램 전송 실패: %v", err)
+		}
+		return
 	}
-	if err := srv.SendTelegramMsg(msg); err != nil {
-		console.LogError("[scheduler] 텔레그램 전송 실패: %v", err)
 	}
-}
-
 func (s *Scheduler) runSurgeSync() {
 	srv.RunSurgeSync()
 }
@@ -102,7 +102,7 @@ func (s *Scheduler) runTgMonitor() {
 // 감시 대상 컨테이너 목록
 var watchContainers = []string{
 	"dart_pi", "drawchart_pi", "jarvis_pi", "kis2_pi", "ls_pi",
-	"MC_pi", "pyforme_pi", "pyforme2_pi", "stocktopreason_pi", "youtube_pi",
+	"MC_pi", "pyforme_pi", "pyforme2_pi", "stocktopreason_pi", "youtubeContent_pi",
 	"dbsender_pi", "makesql_pi", "mkyoutube_pi", "news_pi",
 	"ontology_pi", "restgo_pi", "restgo2_pi", "rstudio_pi", "saver_pi", "upbit_pi",
 }
@@ -147,6 +147,9 @@ func checkLogModules(now time.Time) []string {
 		expected = filtered
 	}
 
+	if now.Hour() == 0 {
+		now = now.Add(-1 * time.Hour) // 00시대에는 전일 데이터로 체크
+	}
 	today := now.Format("2006/01/02")
 	console.Log("[process_check] LOG query: today=%s", today)
 
@@ -207,14 +210,28 @@ func queryLogModules(dateStr string) map[string]bool {
 
 // execStdin runs docker exec -i API_pi pi -p with the given prompt via stdin
 func execStdin(prompt string) string {
-	cmd := exec.Command("docker", "exec", "-i", "API_pi", "pi", "-p", "--no-session", "--no-tools", "--thinking", "high")
-	cmd.Stdin = strings.NewReader(prompt)
-	out, err := cmd.Output()
+	// API_pi HTTP 서버 직접 호출 (Extension)
+	reqBody, _ := json.Marshal(map[string]string{"prompt": prompt})
+	resp, err := http.Post("http://localhost:3001/run", "application/json", bytes.NewReader(reqBody))
 	if err != nil {
-		console.LogError("[execStdin] API_pi error: %v", err)
+		console.LogError("[execStdin] HTTP POST error: %v", err)
 		return ""
 	}
-	return string(out)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		console.LogError("[execStdin] HTTP status error: %d", resp.StatusCode)
+		return ""
+	}
+
+	var result struct {
+		Output string `json:"output"` 
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		console.LogError("[execStdin] JSON decode error: %v", err)
+		return ""
+	}
+	return result.Output
 }
 
 // 이전 알림 상태 (중복 방지)

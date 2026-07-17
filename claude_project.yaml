@@ -27,7 +27,7 @@ projects:
   - name: RESTG
     path: /home/feihong/code/REST/RESTG
   - name: RESTGo
-    path: /home/feihong/code/REST/RESTGo
+    path: /home/feihong/code/RESTGo
   - name: Saver
     path: /home/feihong/code/Saver
   - name: StockTopReason
