@@ -84,17 +84,17 @@ func (s *Scheduler) runSecurityCheck() {
 		}
 		return
 	}
+	
+	if err := srv.SendTelegramMsg("🛡️ [보안 점검 요약]\n" + summary); err != nil {
+		console.LogError("[scheduler] 텔레그램 요약 전송 실패: %v", err)
 	}
+}
 func (s *Scheduler) runSurgeSync() {
 	srv.RunSurgeSync()
 }
 
 func (s *Scheduler) runTempCheck() {
 	srv.RunTempCheck()
-}
-
-func (s *Scheduler) runTgMonitor() {
-	execOutput("/home/feihong/code/MakeSQL/python/.venv/bin/python3", []string{"/home/feihong/code/MakeSQL/python/tg_monitor.py"})
 }
 
 // --- 프로세스 감시 (watchdog) ---
