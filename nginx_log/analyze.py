@@ -9,6 +9,7 @@
 import re
 import sys
 import gzip
+import ipaddress
 import json
 import argparse
 from pathlib import Path
@@ -241,10 +242,21 @@ def parse_error_logs(files: list[Path], since: datetime | None) -> tuple[list[di
     return errors, rate_limits
 
 
-def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict], blocked_ips: set,
+def is_blocked_ip(ip: str, blocked_networks: list) -> bool:
+    """geo blocklist의 개별 IP/CIDR에 포함되는지 확인한다."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(addr.version == network.version and addr in network for network in blocked_networks)
+
+
+def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict], blocked_networks: list,
             f2b: list[dict], hours: int | None) -> dict:
     servers = ["feivyblog", "moodle", "theoed", "bnslab", "unknown"]
     total = len(access)
+    # geo 차단뿐 아니라 default server가 444로 막은 IP도 이미 대응된 대상으로 본다.
+    runtime_blocked_ips = {r["ip"] for r in access if r["status"] == 444}
 
     ips_per_server: dict[str, set] = defaultdict(set)
     req_per_server: Counter = Counter()
@@ -266,20 +278,31 @@ def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict], blo
         status_per_server[srv][grp] += 1
         paths_per_server[srv][r["path"].split("?")[0]] += 1
 
-        for t in r["threats"]:
-            threat_by_type[t] += 1
-            threat_by_ip[r["ip"]] += 1
-        if r["threats"]:
+        blocked = (
+            is_blocked_ip(r["ip"], blocked_networks)
+            or r["ip"] in runtime_blocked_ips
+        )
+
+        # geo blocklist 또는 444로 이미 차단된 IP는 정기 보안 알림 대상에서 제외한다.
+        if r["threats"] and not blocked:
+            for t in r["threats"]:
+                threat_by_type[t] += 1
+                threat_by_ip[r["ip"]] += 1
             threat_records.append(r)
 
-        # 무차별 대입: 401/403 다수
-        if r["status"] in (401, 403):
+        # 무차별 대입: 401/403 다수 (미차단 IP만)
+        if r["status"] in (401, 403) and not blocked:
             brute_force_ips[r["ip"]] += 1
 
-    # 고빈도 IP (스캐너 의심)
-    all_ip_count: Counter = Counter(r["ip"] for r in access)
-    # 평균의 5배 이상 접근 = 스캐너 의심
-    avg = total / max(len(all_ip_count), 1)
+    # 고빈도 IP (스캐너 의심) — 이미 차단된 IP는 제외
+    active_access = [
+        r for r in access
+        if not is_blocked_ip(r["ip"], blocked_networks)
+        and r["ip"] not in runtime_blocked_ips
+    ]
+    all_ip_count: Counter = Counter(r["ip"] for r in active_access)
+    # 미차단 요청의 평균 5배 이상 접근 = 스캐너 의심
+    avg = len(active_access) / max(len(all_ip_count), 1)
     scanner_ips = {ip: cnt for ip, cnt in all_ip_count.items() if cnt >= max(avg * 5, 20)}
 
     # ── Rate Limit 분석 ──────────────────────────────────────────
@@ -291,10 +314,6 @@ def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict], blo
     f2b_bans = [r for r in f2b if r["op"] == "Ban"]
     f2b_unbans = [r for r in f2b if r["op"] == "Unban"]
 
-    # ── 444 (default server 차단) ────────────────────────────────
-    blocked_444 = [r for r in access if r["status"] == 444]
-    blocked_444_ips: Counter = Counter(r["ip"] for r in blocked_444)
-
     # 결과 조립
     result: dict = {
         "period_hours": hours,
@@ -303,8 +322,7 @@ def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict], blo
         "security": {
             "threat_total": len(threat_records),
             "threat_by_type": dict(threat_by_type.most_common()),
-            "threat_top_ips": dict((ip, cnt) for ip, cnt in threat_by_ip.most_common() if ip not in blocked_ips),
-            "threat_blocked_ips": len([ip for ip in threat_by_ip if ip in blocked_ips]),
+            "threat_top_ips": dict(threat_by_ip.most_common()),
             "threat_samples": [
                 {
                     "ip": r["ip"],
@@ -329,10 +347,6 @@ def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict], blo
             "bans": len(f2b_bans),
             "unbans": len(f2b_unbans),
             "banned_ips": [{"ip": r["ip"], "jail": r["jail"], "time": r["time"]} for r in f2b_bans[-10:]],
-        },
-        "blocked_444": {
-            "total": len(blocked_444),
-            "top_ips": dict(blocked_444_ips.most_common(5)),
         },
         "errors": {
             "total": len(errors),
@@ -380,14 +394,17 @@ def main():
         print(f"파일 없음: {missing}", file=sys.stderr)
         sys.exit(1)
 
-    blocked_ips = set()
+    blocked_networks = []
     if args.blocklist:
         try:
             with open(args.blocklist) as bf:
                 for line in bf:
                     m = re.match(r'\s*([0-9a-fA-F.:]+(?:/[0-9]+)?)\s+1;', line)
                     if m:
-                        blocked_ips.add(m.group(1))
+                        try:
+                            blocked_networks.append(ipaddress.ip_network(m.group(1), strict=False))
+                        except ValueError:
+                            continue
         except Exception:
             pass
 
@@ -399,7 +416,7 @@ def main():
     errors, rate_limits = parse_error_logs(files, since)
     f2b = parse_fail2ban_logs(files, since)
 
-    result = analyze(access, errors, rate_limits, blocked_ips, f2b, args.hours)
+    result = analyze(access, errors, rate_limits, blocked_networks, f2b, args.hours)
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -463,14 +480,9 @@ def main():
             print(f"    {cnt:4d}  {ip}")
 
     f2b_r = result["fail2ban"]
-    b444 = result["blocked_444"]
     print(f"\n  🔒 Fail2Ban 자동차단: {f2b_r['bans']}건 밴 / {f2b_r['unbans']}건 해제")
     for ban in f2b_r["banned_ips"][-3:]:
         print(f"    [{ban['jail']}] {ban['ip']} ({ban['time']})")
-    print(f"  🚫 Default Server 444 차단: {b444['total']}건")
-    if b444["top_ips"]:
-        for ip, cnt in list(b444["top_ips"].items())[:3]:
-            print(f"    {cnt:4d}  {ip}")
 
 
 if __name__ == "__main__":
