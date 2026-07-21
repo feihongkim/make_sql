@@ -420,6 +420,17 @@ type NginxAnalyzeResult struct {
 	Errors struct {
 		Total int `json:"total"`
 	} `json:"errors"`
+	AutoBlock struct {
+		Applied []struct {
+			IP       string `json:"ip"`
+			Reason   string `json:"reason"`
+			Requests int    `json:"requests"`
+			Threats  int    `json:"threats"`
+			Expires  string `json:"expires"`
+		} `json:"applied"`
+		Expired []string `json:"expired"`
+		Error   string   `json:"error"`
+	} `json:"auto_block"`
 }
 
 func formatNginxAnalyzeMsg(jsonStr string) string {
@@ -456,6 +467,19 @@ func formatNginxAnalyzeMsg(jsonStr string) string {
 		b.WriteString("✅ 보안 위협 없음\n")
 	}
 	b.WriteString(fmt.Sprintf("🔒 Fail2Ban: 밴 %d건 / 해제 %d건\n", r.Fail2Ban.Bans, r.Fail2Ban.Unbans))
+	if r.AutoBlock.Error != "" {
+		b.WriteString("⚠️ 자동 차단 적용 실패: " + r.AutoBlock.Error + "\n")
+	}
+	if len(r.AutoBlock.Applied) > 0 {
+		b.WriteString(fmt.Sprintf("🤖 자동 차단: %d건\n", len(r.AutoBlock.Applied)))
+		for _, item := range r.AutoBlock.Applied {
+			b.WriteString(fmt.Sprintf("  %s — %s (위협 %d건 / 요청 %d건, %s 만료)\n",
+				item.IP, item.Reason, item.Threats, item.Requests, item.Expires))
+		}
+	}
+	if len(r.AutoBlock.Expired) > 0 {
+		b.WriteString(fmt.Sprintf("🧹 자동 차단 만료 해제: %s\n", strings.Join(r.AutoBlock.Expired, ", ")))
+	}
 	if r.Errors.Total > 0 {
 		b.WriteString(fmt.Sprintf("🔴 에러로그 %d건\n", r.Errors.Total))
 	}

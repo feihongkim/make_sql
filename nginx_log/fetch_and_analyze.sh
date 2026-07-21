@@ -10,10 +10,12 @@ TMP_ACCESS="/tmp/nginx_access_$$.log"
 TMP_ERROR="/tmp/nginx_error_$$.log"
 TMP_F2B="/tmp/nginx_fail2ban_$$.log"
 TMP_BLOCKLIST="/tmp/nginx_blocklist_$$.conf"
+TMP_ANALYSIS="/tmp/nginx_analysis_$$.json"
+AUTO_BLOCK_HISTORY="${SCRIPT_DIR}/auto_block_history.jsonl"
 
 cleanup() {
     rm -f "$TMP_ACCESS" "$TMP_ERROR" "$TMP_F2B"
-    rm -f "$TMP_BLOCKLIST"
+    rm -f "$TMP_BLOCKLIST" "$TMP_ANALYSIS"
 }
 trap cleanup EXIT
 
@@ -39,6 +41,22 @@ if [ ! -s "$TMP_ACCESS" ]; then
     exit 1
 fi
 
-# 분석 실행 (JSON 출력)
+# 미차단 위협 분석 결과 생성
 python3 "$SCRIPT_DIR/analyze.py" \
-    --hours "$HOURS" --json --blocklist "$TMP_BLOCKLIST" "$TMP_ACCESS" "$TMP_ERROR" "$TMP_F2B"
+    --hours "$HOURS" --json --blocklist "$TMP_BLOCKLIST" "$TMP_ACCESS" "$TMP_ERROR" "$TMP_F2B" \
+    > "$TMP_ANALYSIS"
+
+# 명백한 공격자만 30일 임시 차단 후 결과 JSON에 자동 차단 내역을 첨부한다.
+AUTO_BLOCK_ARGS=(
+    --analysis "$TMP_ANALYSIS"
+    --blocklist "$TMP_BLOCKLIST"
+    --ssh-key "$SSH_KEY"
+    --remote "$REMOTE_HOST"
+    --history "$AUTO_BLOCK_HISTORY"
+)
+if [[ "${AUTO_BLOCK_DRY_RUN:-0}" == "1" ]]; then
+    AUTO_BLOCK_ARGS+=(--dry-run)
+fi
+python3 "$SCRIPT_DIR/auto_block.py" "${AUTO_BLOCK_ARGS[@]}"
+
+cat "$TMP_ANALYSIS"

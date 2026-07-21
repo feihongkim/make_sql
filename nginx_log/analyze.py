@@ -265,6 +265,7 @@ def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict], blo
     paths_per_server: dict[str, Counter] = defaultdict(Counter)
     threat_by_type: Counter = Counter()
     threat_by_ip: Counter = Counter()
+    threat_types_by_ip: dict[str, Counter] = defaultdict(Counter)
     threat_records: list[dict] = []
     brute_force_ips: Counter = Counter()
 
@@ -288,6 +289,7 @@ def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict], blo
             for t in r["threats"]:
                 threat_by_type[t] += 1
                 threat_by_ip[r["ip"]] += 1
+                threat_types_by_ip[r["ip"]][t] += 1
             threat_records.append(r)
 
         # 무차별 대입: 401/403 다수 (미차단 IP만)
@@ -301,6 +303,7 @@ def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict], blo
         and r["ip"] not in runtime_blocked_ips
     ]
     all_ip_count: Counter = Counter(r["ip"] for r in active_access)
+    active_bot_count: Counter = Counter(r["ip"] for r in active_access if r["bot"])
     # 미차단 요청의 평균 5배 이상 접근 = 스캐너 의심
     avg = len(active_access) / max(len(all_ip_count), 1)
     scanner_ips = {ip: cnt for ip, cnt in all_ip_count.items() if cnt >= max(avg * 5, 20)}
@@ -335,6 +338,20 @@ def analyze(access: list[dict], errors: list[dict], rate_limits: list[dict], blo
             ],
             "brute_force_ips": dict(brute_force_ips.most_common(10)),
             "scanner_ips": dict(sorted(scanner_ips.items(), key=lambda x: -x[1])[:10]),
+            # auto_block.py가 엄격한 자동 차단 여부를 판단하는 내부 후보 데이터
+            "auto_block_candidates": [
+                {
+                    "ip": ip,
+                    "requests": all_ip_count[ip],
+                    "threats": threat_count,
+                    "types": dict(threat_types_by_ip[ip].most_common()),
+                    "bot_requests": active_bot_count[ip],
+                }
+                for ip, threat_count in sorted(
+                    threat_by_ip.items(),
+                    key=lambda item: (-item[1], -all_ip_count[item[0]], item[0]),
+                )
+            ],
         },
         "rate_limit": {
             "total": len(rate_limits),
