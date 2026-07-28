@@ -159,6 +159,17 @@ func checkLogModules(now time.Time) []string {
 	}
 
 	for _, mod := range expected {
+		// 특정 모듈의 첫 실행 시간이 아직 도래하지 않은 경우 체크 제외
+		if mod == "youtubeList" && now.Hour() < 7 {
+			continue
+		}
+		if mod == "TopReason" && now.Hour() < 21 {
+			continue
+		}
+		if mod == "youtubeContent" && now.Hour() < 7 {
+			continue
+		}
+
 		if !present[mod] {
 			missing = append(missing, fmt.Sprintf("LOG 모듈 [%s] 오늘 미출현", mod))
 		}
