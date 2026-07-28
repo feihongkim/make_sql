@@ -121,208 +121,52 @@ echo '1234567890:ABCdef...' > ~/code/$PROJECT/tele.token
 
 ### 3-2. 생성 스크립트
 
-아래 블록에서 `PROJECT`와 `USER_ID`만 바꿔 그대로 실행한다.
+**MakeSQL 저장소의 스크립트 한 줄이면 된다.** 예전에는 이 절에 230줄짜리 블록을
+복붙했고, agentapi 배선(10-4)은 그 뒤에 손으로 7군데를 덧대야 했다. 지금은 스크립트가
+둘을 함께 만든다.
 
 ```bash
-PROJECT=apply                                   # ← 프로젝트 폴더명
-USER_ID='7723743534'                            # ← 2-2에서 확인한 id (토큰 없으면 아무 값이나)
-CLAUDE_VERSION=2.1.220                          # ← npm view @anthropic-ai/claude-code version
+cd ~/code/MakeSQL
+./scripts/create_claude_container.sh <PROJECT> [USER_ID]
 
-cd ~/code/$PROJECT
-
-# --- 봇 토큰 읽기 (없거나 비어 있으면 텔레그램 없이 구성) -------------------
-BOT_TOKEN=""
-[ -f tele.token ] && BOT_TOKEN=$(tr -d ' \r\n' < tele.token)
-if [ -n "$BOT_TOKEN" ]; then
-  echo "토큰 있음 → 텔레그램 활성화로 구성"
-else
-  echo "토큰 없음 → 텔레그램 없이 구성"
-fi
-
-# --- 디렉토리 ---------------------------------------------------------------
-# .claude-state 하위를 미리 만든다. 없으면 Docker가 root 소유로 생성해 컨테이너가 못 쓴다.
-mkdir -p docker-config/telegram
-mkdir -p .claude-state/{channels,projects,sessions,shell-snapshots,file-history,debug,ide,session-env}
-
-# --- 봇 토큰 / 허용목록 -----------------------------------------------------
-# 토큰이 없어도 빈 파일을 만든다. Dockerfile COPY 대상이라 파일 자체는 있어야 한다.
-printf 'TELEGRAM_BOT_TOKEN=%s\n' "$BOT_TOKEN" > docker-config/telegram/.env
-chmod 600 docker-config/telegram/.env
-
-cat > docker-config/telegram/access.json <<EOF
-{
-  "dmPolicy": "allowlist",
-  "allowFrom": ["$USER_ID"],
-  "groups": {},
-  "pending": {}
-}
-EOF
-
-# --- 컨테이너 전용 Claude 설정 (호스트 설정 위에 얹힌다) --------------------
-# 두 벌을 만든다. entrypoint 가 토큰 유무를 보고 골라 쓴다.
-cat > docker-config/claude-settings.json <<'EOF'
-{
-  "model": "sonnet",
-  "enabledPlugins": {
-    "telegram@claude-plugins-official": true
-  },
-  "skipDangerousModePermissionPrompt": true,
-  "env": {
-    "DISABLE_AUTOUPDATER": "1"
-  }
-}
-EOF
-
-# 텔레그램 없이 기동할 때 쓸 설정.
-# false 를 명시해야 한다. 생략하면 전역 설치된 플러그인이 그대로 활성이라
-# --channels 를 안 줘도 MCP 서버가 떠서 봇 토큰을 물어버린다.
-cat > docker-config/claude-settings-notelegram.json <<'EOF'
-{
-  "model": "sonnet",
-  "enabledPlugins": {
-    "telegram@claude-plugins-official": false
-  },
-  "skipDangerousModePermissionPrompt": true,
-  "env": {
-    "DISABLE_AUTOUPDATER": "1"
-  }
-}
-EOF
-
-# --- 앱 상태: 온보딩·폴더신뢰 프롬프트 스킵 ---------------------------------
-# hasTrustDialogAccepted 가 없으면 컨테이너가 기동 직후 신뢰 확인 프롬프트에서 멈춘다.
-cat > docker-config/claude.json <<'EOF'
-{
-  "hasCompletedOnboarding": true,
-  "projects": {
-    "/workspace": {
-      "hasTrustDialogAccepted": true,
-      "projectOnboardingSeenCount": 1,
-      "hasClaudeMdExternalIncludesApproved": true,
-      "hasClaudeMdExternalIncludesWarningShown": true
-    }
-  }
-}
-EOF
-
-# --- entrypoint -------------------------------------------------------------
-cat > docker-config/entrypoint.sh <<'EOF'
-#!/bin/bash
-set -e
-
-# 봇 토큰이 실제로 들어 있는지 확인한다.
-# 없거나 비어 있으면 텔레그램 없이(플러그인 비활성) 기동한다.
-TOKEN_VALUE=""
-if [ -f "$HOME/.defaults/telegram/.env" ]; then
-  TOKEN_VALUE=$(sed -n 's/^TELEGRAM_BOT_TOKEN=//p' "$HOME/.defaults/telegram/.env" | head -1 | tr -d ' \r\n')
-fi
-
-if [ -n "$TOKEN_VALUE" ]; then
-  # channels/ 는 프로젝트 전용 마운트이므로, 플러그인 기본 경로에 그대로 넣으면 된다.
-  TG_DIR="$HOME/.claude/channels/telegram"
-  mkdir -p "$TG_DIR/approved"
-
-  if [ ! -f "$TG_DIR/.env" ]; then
-    cp "$HOME/.defaults/telegram/.env" "$TG_DIR/.env"
-    echo "[entrypoint] 봇 토큰 초기화"
-  fi
-  if [ ! -f "$TG_DIR/access.json" ]; then
-    cp "$HOME/.defaults/telegram/access.json" "$TG_DIR/access.json"
-    echo "[entrypoint] access.json 초기화"
-  fi
-  chmod 600 "$TG_DIR/.env" "$TG_DIR/access.json"
-
-  echo "[entrypoint] 텔레그램 채널 활성화"
-  # settings.json 을 $HOME/.claude 에 쓰면 호스트 전역 설정을 덮어쓴다. --settings 로 넘긴다.
-  exec claude \
-    --dangerously-skip-permissions \
-    --settings "$HOME/.defaults/settings.json" \
-    --channels plugin:telegram@claude-plugins-official
-else
-  echo "[entrypoint] 봇 토큰 없음 → 텔레그램 없이 기동"
-  exec claude \
-    --dangerously-skip-permissions \
-    --settings "$HOME/.defaults/settings-notelegram.json"
-fi
-EOF
-
-# --- Dockerfile -------------------------------------------------------------
-cat > Dockerfile <<EOF
-FROM node:20-slim
-
-RUN apt-get update && apt-get install -y \\
-    openssh-client bash curl unzip git procps \\
-    && rm -rf /var/lib/apt/lists/*
-
-# 컨테이너 사용자 홈을 호스트와 동일한 경로로 맞춘다.
-# ~/.claude 안의 JSON이 절대경로를 저장하므로, 홈이 다르면 공유된 plugins/ 가 통째로 로드 실패한다.
-RUN usermod -l feihong -d /home/feihong -m node && groupmod -n feihong node
-
-# bun (telegram 플러그인이 bun server.ts 로 실행됨)
-RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash
-
-# 버전을 명시한다. 생략하면 Docker 레이어 캐시 때문에 첫 빌드 시점 버전에 영구히 묶인다.
-ARG CLAUDE_VERSION=$CLAUDE_VERSION
-RUN npm install -g @anthropic-ai/claude-code@\${CLAUDE_VERSION}
-
-# 컨테이너 전용 기본값 — .claude 밖이라 볼륨 마운트에 덮이지 않는다
-RUN mkdir -p /home/feihong/.defaults/telegram
-COPY docker-config/claude-settings.json            /home/feihong/.defaults/settings.json
-COPY docker-config/claude-settings-notelegram.json /home/feihong/.defaults/settings-notelegram.json
-COPY docker-config/telegram/.env                   /home/feihong/.defaults/telegram/.env
-COPY docker-config/telegram/access.json            /home/feihong/.defaults/telegram/access.json
-
-# 앱 상태. 마운트하지 않고 이미지에 굽는다
-COPY docker-config/claude.json /home/feihong/.claude.json
-
-RUN chown -R feihong:feihong /home/feihong/.defaults /home/feihong/.claude.json
-
-COPY docker-config/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-WORKDIR /workspace
-USER feihong
-CMD ["/entrypoint.sh"]
-EOF
-
-# --- docker-compose.yml -----------------------------------------------------
-cat > docker-compose.yml <<EOF
-services:
-  claude:
-    build: .
-    container_name: ${PROJECT}_claude
-    restart: unless-stopped
-    stdin_open: true
-    tty: true
-    volumes:
-      # 작업 대상 소스
-      - /home/feihong/code/$PROJECT:/workspace
-
-      # 전역 공유 (베이스) — 자격증명, 플러그인. 호스트/컨테이너 경로가 같아야 한다
-      - /home/feihong/.claude:/home/feihong/.claude
-
-      # 프로젝트 전용 — 위 베이스의 하위 경로를 덮어쓴다
-      - /home/feihong/code/$PROJECT/.claude-state/channels:/home/feihong/.claude/channels
-      - /home/feihong/code/$PROJECT/.claude-state/projects:/home/feihong/.claude/projects
-      - /home/feihong/code/$PROJECT/.claude-state/sessions:/home/feihong/.claude/sessions
-      - /home/feihong/code/$PROJECT/.claude-state/shell-snapshots:/home/feihong/.claude/shell-snapshots
-      - /home/feihong/code/$PROJECT/.claude-state/file-history:/home/feihong/.claude/file-history
-      - /home/feihong/code/$PROJECT/.claude-state/debug:/home/feihong/.claude/debug
-      - /home/feihong/code/$PROJECT/.claude-state/ide:/home/feihong/.claude/ide
-      - /home/feihong/code/$PROJECT/.claude-state/session-env:/home/feihong/.claude/session-env
-EOF
-
-# --- .gitignore -------------------------------------------------------------
-cat >> .gitignore <<'EOF'
-.claude-state/
-docker-config/telegram/
-docker-config/ssh/
-tele.token
-EOF
-
-chmod 600 docker-config/telegram/.env
-echo "생성 완료: ~/code/$PROJECT"
+# 예
+./scripts/create_claude_container.sh apply 7723743534   # 텔레그램 + agentapi
+./scripts/create_claude_container.sh myproj             # agentapi 만 (tele.token 없을 때)
 ```
+
+| 인자 | 뜻 |
+|---|---|
+| `PROJECT` | `~/code` 아래 폴더명, 또는 절대경로 (`/data2/rstudio` 처럼) |
+| `USER_ID` | 2-2 에서 확인한 텔레그램 id. 생략하면 텔레그램 없이 구성 |
+| `CLAUDE_VERSION=` | 환경변수로 버전 지정 (`npm view @anthropic-ai/claude-code version`) |
+
+생성되는 것:
+
+```
+Dockerfile
+docker-compose.yml
+.gitignore
+docker-config/entrypoint.sh
+docker-config/claude.json
+docker-config/managed-settings.json               ← 채널 allowlist 승인 (10-2)
+docker-config/claude-settings.json                telegram + agentapi
+docker-config/claude-settings-notelegram.json     agentapi 만
+docker-config/claude-settings-oneshot.json        ask --new 전용, 둘 다 비활성
+docker-config/telegram/{.env,access.json}
+.claude-state/{channels,projects,sessions,...}    런타임 상태 디렉토리 8개
+```
+
+**여러 번 돌려도 안전하다.** 매번 완전한 세트를 생성하므로 agentapi 배선이 빠지거나
+덮어써지지 않는다. 설정을 바꾼 뒤 다시 돌려도 된다.
+
+스크립트가 만들지 않는 것은 **`tele.token` 하나**다. 봇은 사람이 만들어야 한다(2절).
+토큰 없이 돌리면 텔레그램 없는 구성이 나오고, 나중에 토큰을 넣고 다시 돌리면 활성화된다.
+
+기동 전 사전 점검도 스크립트가 한다 — agentapi 플러그인이 호스트에 설치돼 있지 않으면
+설치 명령을 안내하고 멈춘다 (10-3).
+
+> 각 파일이 왜 그렇게 생겼는지는 8절(설계 근거)과 10-2(채널 allowlist)에 있다.
+> 스크립트를 고칠 일이 있으면 그쪽을 먼저 읽는다.
 
 ### 3-3. 네트워크: 전부 bridge. `network_mode: host`는 쓰지 않는다
 
@@ -489,11 +333,11 @@ npm 전역 경로가 root 소유라 컨테이너 사용자가 못 쓴다. `claud
 재빌드한다. entrypoint가 알아서 텔레그램 모드로 뜬다.
 
 ```bash
-cd ~/code/<Project>
-echo '1234567890:ABCdef...' > tele.token
-# 3-2절 스크립트 재실행 (기존 파일을 덮어쓴다)
-docker compose up -d --build
-docker compose logs --no-color | grep entrypoint     # "텔레그램 채널 활성화" 확인
+echo '1234567890:ABCdef...' > ~/code/<Project>/tele.token
+cd ~/code/MakeSQL
+./scripts/create_claude_container.sh <Project> <USER_ID>     # 재실행은 안전하다
+cd ~/code/<Project> && docker compose up -d --build
+docker compose logs --no-color | grep entrypoint             # "텔레그램 채널 활성화" 확인
 ```
 
 끄려면 반대로 `tele.token`을 비우고(`: > tele.token`) 같은 절차를 밟는다. 이때
@@ -746,7 +590,11 @@ cd ~/.claude/marketplaces-local/makesql-channels/plugins/agentapi && bun install
 
 ### 10-4. 프로젝트에 적용
 
-**`docker-config/managed-settings.json`** (신규)
+**3-2 의 생성 스크립트가 이미 다 해준다.** 아래는 스크립트가 무엇을 넣는지에 대한
+설명이며, 손으로 따라 할 필요는 없다. (예전에는 이 절이 7군데를 직접 고치라는
+지시였고, 3-2 를 다시 돌리면 그 수정이 통째로 날아가는 문제가 있었다.)
+
+**`docker-config/managed-settings.json`** — 이미지의 `/etc/claude-code/` 로 들어간다
 
 ```json
 {
@@ -758,34 +606,34 @@ cd ~/.claude/marketplaces-local/makesql-channels/plugins/agentapi && bun install
 }
 ```
 
-**`Dockerfile`** — `USER feihong` 앞에 추가 (policy tier 라 root 소유여야 한다)
+> `allowedChannelPlugins` 는 Anthropic 기본 목록을 **대체**한다. telegram 을 빼면 텔레그램
+> 채널까지 죽는다. `channelsEnabled: true` 를 빠뜨리면 **전 채널이 정책 차단**된다.
+
+**`Dockerfile`** — `USER` 지시 앞에서 policy 파일을 굽는다 (root 소유여야 한다)
 
 ```dockerfile
 RUN mkdir -p /etc/claude-code
 COPY docker-config/managed-settings.json /etc/claude-code/managed-settings.json
 ```
 
-**`claude-settings.json` / `claude-settings-notelegram.json`** — 플러그인 활성화
+**설정 3벌** — `enabledPlugins` 조합이 각각 다르다
 
-```json
-"enabledPlugins": {
-  "telegram@claude-plugins-official": true,
-  "agentapi@makesql-channels": true
-}
-```
+| 파일 | telegram | agentapi | 쓰이는 때 |
+|---|---|---|---|
+| `claude-settings.json` | `true` | `true` | 토큰 있음 |
+| `claude-settings-notelegram.json` | `false` | `true` | 토큰 없음 |
+| `claude-settings-oneshot.json` | `false` | `false` | **`ask --new`** |
+
+세 번째가 없으면 일회성 실행이 채널 포트를 뺏으려다 실패하고, 그 실패가 호스트 공유
+캐시에 기록돼 전 컨테이너의 채널이 죽는다 (10-6).
 
 **`entrypoint.sh`** — `--channels` 는 공백 구분 가변인자다 (`--channels <servers...>`)
 
 ```bash
 # 텔레그램 있는 경우
-exec claude --dangerously-skip-permissions \
-  --settings "$HOME/.defaults/settings.json" \
-  --channels plugin:telegram@claude-plugins-official plugin:agentapi@makesql-channels
-
+--channels plugin:telegram@claude-plugins-official plugin:agentapi@makesql-channels
 # 텔레그램 없는 경우
-exec claude --dangerously-skip-permissions \
-  --settings "$HOME/.defaults/settings-notelegram.json" \
-  --channels plugin:agentapi@makesql-channels
+--channels plugin:agentapi@makesql-channels
 ```
 
 ### 10-5. 사용
