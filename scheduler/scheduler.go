@@ -88,6 +88,13 @@ func HandleScheduler(args []string) {
 }
 
 func (s *Scheduler) run() {
+	// 스케줄과 실행 함수의 짝을 기동 즉시 확인한다. 여기서 걸리면 발동 시각까지
+	// 기다렸다가 조용히 건너뛰는 일이 없다.
+	if err := validateSchedule(s.tasks); err != nil {
+		console.LogError("[scheduler] 스케줄 구성 오류: %v", err)
+		os.Exit(1)
+	}
+
 	if isSchedulerRunning(s.pidFile) {
 		console.Log("[scheduler] 이미 실행 중입니다.")
 		os.Exit(1)
@@ -201,35 +208,53 @@ func recoverTask(task Task) {
 	}
 }
 
-func (s *Scheduler) runTask(task Task) {
-	switch task.Commands[0] {
-	case "nginx-analyze":
-		s.runNginxAnalyze()
-	case "log-analyze":
-		s.runLogAnalyze(task.Commands[1:])
-	case "security-check":
-		s.runSecurityCheck()
-	case "surge-sync":
-		s.runSurgeSync()
-	case "blog-sync":
-		s.runBlogSync()
-	case "temp-check":
-		s.runTempCheck()
-	case "youtube-list":
-		s.runYoutubeList()
-	case "youtube-content":
-		s.runYoutubeContent()
-	case "topreason-analyze":
-		s.runTopReasonAnalyze()
-	case "queue-to-mongo":
-		s.runQueueToMongo()
-	case "code-backup":
-		s.runCodeBackup()
-	case "process-check":
-		s.runProcessCheck()
-	default:
-		console.LogError("[scheduler] 알 수 없는 명령: %s", task.Commands[0])
+// taskRunners 는 Task.Commands[0] 과 실제 실행 함수를 잇는다.
+//
+// switch 대신 map 을 쓰는 이유는 문법 취향이 아니라 **검증** 때문이다.
+// switch 는 case 목록을 프로그램이 읽을 수 없어서, BuildSchedule 에만 작업을
+// 추가하고 실행 함수를 빠뜨려도 기동 시점에는 아무 문제가 없다. 발동 시각이
+// 돼서야 "알 수 없는 명령" 로그 한 줄을 남기는데, dispatch 는 실행 전에 완료로
+// 기록하므로 그날 다시 시도하지도 않는다 — 조용히 매일 건너뛴다.
+//
+// map 으로 두면 validateSchedule() 이 기동 즉시 짝을 맞춰보고, 테스트로도 잡힌다.
+var taskRunners = map[string]func(*Scheduler, []string){
+	"nginx-analyze":     func(s *Scheduler, _ []string) { s.runNginxAnalyze() },
+	"log-analyze":       func(s *Scheduler, args []string) { s.runLogAnalyze(args) },
+	"security-check":    func(s *Scheduler, _ []string) { s.runSecurityCheck() },
+	"surge-sync":        func(s *Scheduler, _ []string) { s.runSurgeSync() },
+	"blog-sync":         func(s *Scheduler, _ []string) { s.runBlogSync() },
+	"temp-check":        func(s *Scheduler, _ []string) { s.runTempCheck() },
+	"youtube-list":      func(s *Scheduler, _ []string) { s.runYoutubeList() },
+	"youtube-content":   func(s *Scheduler, _ []string) { s.runYoutubeContent() },
+	"topreason-analyze": func(s *Scheduler, _ []string) { s.runTopReasonAnalyze() },
+	"queue-to-mongo":    func(s *Scheduler, _ []string) { s.runQueueToMongo() },
+	"code-backup":       func(s *Scheduler, _ []string) { s.runCodeBackup() },
+	"process-check":     func(s *Scheduler, _ []string) { s.runProcessCheck() },
+}
+
+// validateSchedule 은 모든 Task 에 실행 함수가 있는지 확인한다.
+// 짝이 안 맞으면 새벽에 조용히 건너뛰는 대신 기동 시점에 드러난다.
+func validateSchedule(tasks []Task) error {
+	for _, t := range tasks {
+		if len(t.Commands) == 0 {
+			return fmt.Errorf("태스크 %q 에 명령이 없습니다", t.Label)
+		}
+		if _, ok := taskRunners[t.Commands[0]]; !ok {
+			return fmt.Errorf("태스크 %q 의 명령 %q 에 대응하는 실행 함수가 taskRunners 에 없습니다",
+				t.Label, t.Commands[0])
+		}
 	}
+	return nil
+}
+
+func (s *Scheduler) runTask(task Task) {
+	run, ok := taskRunners[task.Commands[0]]
+	if !ok {
+		// validateSchedule 을 통과했다면 여기 오지 않는다. 방어적으로만 남긴다.
+		console.LogError("[scheduler] 등록되지 않은 명령: %s", task.Commands[0])
+		return
+	}
+	run(s, task.Commands[1:])
 }
 
 // inTimeWindow 는 "HH:MM" 기준 2분 윈도우 체크

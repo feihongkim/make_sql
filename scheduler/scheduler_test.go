@@ -72,6 +72,46 @@ type testError struct{ s string }
 
 func (e *testError) Error() string { return e.s }
 
+// BuildSchedule 에만 작업을 추가하고 taskRunners 에 빠뜨리면, 예전에는 발동 시각에
+// "알 수 없는 명령" 로그 한 줄만 남고 완료로 기록돼 그날 다시 시도하지 않았다.
+// 조용히 매일 건너뛰는 상태가 된다. 이 테스트가 커밋 시점에 잡는다.
+func TestEveryScheduledTaskHasRunner(t *testing.T) {
+	if err := validateSchedule(BuildSchedule()); err != nil {
+		t.Fatalf("실제 스케줄이 검증을 통과하지 못했다: %v", err)
+	}
+}
+
+func TestValidateScheduleCatchesMissingRunner(t *testing.T) {
+	cases := []struct {
+		name string
+		task Task
+	}{
+		{"등록되지 않은 명령", Task{Label: "typo_task", Commands: []string{"code-bakcup"}}},
+		{"명령이 비어 있음", Task{Label: "empty_task", Commands: []string{}}},
+	}
+	for _, c := range cases {
+		if err := validateSchedule([]Task{c.task}); err == nil {
+			t.Errorf("%s: 오류를 잡지 못했다", c.name)
+		}
+	}
+}
+
+// runTask 가 Commands[1:] 를 인자로 넘기는지 확인한다.
+// log-analyze 는 이 인자로 대상 연결과 시간을 받는다.
+func TestRunTaskPassesArguments(t *testing.T) {
+	orig := taskRunners["log-analyze"]
+	defer func() { taskRunners["log-analyze"] = orig }()
+
+	var got []string
+	taskRunners["log-analyze"] = func(_ *Scheduler, args []string) { got = args }
+
+	newScheduler().runTask(Task{Label: "x", Commands: []string{"log-analyze", "white", "3"}})
+
+	if len(got) != 2 || got[0] != "white" || got[1] != "3" {
+		t.Fatalf("인자가 제대로 전달되지 않았다: %v", got)
+	}
+}
+
 func TestInTimeWindow(t *testing.T) {
 	base := time.Date(2026, 7, 28, 8, 0, 0, 0, loc)
 	cases := []struct {
