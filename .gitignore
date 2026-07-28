@@ -28,3 +28,8 @@ mcp/notion/
 nginx_log/
 test_logs/
 python/.venv/
+
+# 백업 파일 — 변경 전 내용은 git 이력에 남으므로 저장소에 둘 이유가 없다
+*.bak
+*.bak_*
+*.orig
