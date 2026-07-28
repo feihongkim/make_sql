@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strconv"
 	"syscall"
 	"time"
 
 	"MakeSQL/console"
+	"MakeSQL/srv"
 )
 
 var loc *time.Location
@@ -165,41 +167,69 @@ func (s *Scheduler) completedKey(task Task, now time.Time) string {
 	return s.today + ":" + task.Label
 }
 
+// 테스트에서 교체할 수 있게 둔 seam. 프로덕션 동작은 아래 기본값 그대로다.
+var (
+	execTask = (*Scheduler).runTask
+	notify   = srv.SendTelegramMsg
+)
+
 func (s *Scheduler) dispatch(task Task, now time.Time) {
 	key := s.completedKey(task, now)
 	s.completed[key] = now
 	console.Log("[scheduler] [%s] %s 실행 시작", now.Format("15:04:05"), task.Label)
 	go func() {
-		switch task.Commands[0] {
-		case "nginx-analyze":
-			s.runNginxAnalyze()
-		case "log-analyze":
-			s.runLogAnalyze(task.Commands[1:])
-		case "security-check":
-			s.runSecurityCheck()
-		case "surge-sync":
-			s.runSurgeSync()
-		case "blog-sync":
-			s.runBlogSync()
-		case "temp-check":
-			s.runTempCheck()
-		case "youtube-list":
-			s.runYoutubeList()
-		case "youtube-content":
-			s.runYoutubeContent()
-		case "topreason-analyze":
-			s.runTopReasonAnalyze()
-		case "queue-to-mongo":
-			s.runQueueToMongo()
-		case "code-backup":
-			s.runCodeBackup()
-		case "process-check":
-			s.runProcessCheck()
-		default:
-			console.LogError("[scheduler] 알 수 없는 명령: %s", task.Commands[0])
-		}
+		defer recoverTask(task)
+		execTask(s, task)
 		console.Log("[scheduler] [%s] %s 완료", time.Now().In(loc).Format("15:04:05"), task.Label)
 	}()
+}
+
+// recoverTask 는 작업 goroutine 의 패닉을 복구한다.
+//
+// 복구하지 않으면 패닉 하나가 스케줄러 프로세스 전체를 죽인다. 스케줄러는 다른
+// 프로세스를 감시하는 쪽이므로 한 작업의 실패로 함께 내려가면 안 된다.
+// 패닉은 기록·통보하고, 다음 tick 은 계속 돈다.
+func recoverTask(task Task) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	console.LogError("[scheduler] %s 작업 패닉: %v\n%s", task.Label, r, debug.Stack())
+	msg := fmt.Sprintf("🔥 [스케줄러] %s 작업이 패닉으로 중단됐습니다.\n%v", task.Label, r)
+	if err := notify(msg); err != nil {
+		console.LogError("[scheduler] 패닉 알림 전송 실패: %v", err)
+	}
+}
+
+func (s *Scheduler) runTask(task Task) {
+	switch task.Commands[0] {
+	case "nginx-analyze":
+		s.runNginxAnalyze()
+	case "log-analyze":
+		s.runLogAnalyze(task.Commands[1:])
+	case "security-check":
+		s.runSecurityCheck()
+	case "surge-sync":
+		s.runSurgeSync()
+	case "blog-sync":
+		s.runBlogSync()
+	case "temp-check":
+		s.runTempCheck()
+	case "youtube-list":
+		s.runYoutubeList()
+	case "youtube-content":
+		s.runYoutubeContent()
+	case "topreason-analyze":
+		s.runTopReasonAnalyze()
+	case "queue-to-mongo":
+		s.runQueueToMongo()
+	case "code-backup":
+		s.runCodeBackup()
+	case "process-check":
+		s.runProcessCheck()
+	default:
+		console.LogError("[scheduler] 알 수 없는 명령: %s", task.Commands[0])
+	}
 }
 
 // inTimeWindow 는 "HH:MM" 기준 2분 윈도우 체크
