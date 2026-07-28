@@ -26,7 +26,6 @@ type EnvType struct {
 	MSSQL_USER     string `yaml:"MSSQL_USER"`
 	MSSQL_PASSWORD string `yaml:"MSSQL_PASSWORD"`
 
-
 	// MSSQL 서버 주소 (서버이름 → 복호화된 주소)
 	MSSQLAddrs map[string]string `yaml:"-"`
 

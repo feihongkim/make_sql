@@ -100,7 +100,7 @@ func (m *msConn) connectWithStr(dbname, connStr string) error {
 
 	db.SetConnMaxIdleTime(10 * time.Minute)
 	db.SetConnMaxLifetime(1 * time.Hour)
-	db.SetMaxIdleConns(20) // 비동기 MERGE worker pool 지원: 10 → 20
+	db.SetMaxIdleConns(20)  // 비동기 MERGE worker pool 지원: 10 → 20
 	db.SetMaxOpenConns(100) // 성능 최적화: 50 → 100 (배치 MERGE 지원)
 
 	for i := 0; i < 3; i++ {

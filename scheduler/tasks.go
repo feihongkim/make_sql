@@ -1,11 +1,11 @@
 package scheduler
 
 import (
-	"net/http"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
@@ -84,7 +84,7 @@ func (s *Scheduler) runSecurityCheck() {
 		}
 		return
 	}
-	
+
 	if err := srv.SendTelegramMsg("🛡️ [보안 점검 요약]\n" + summary); err != nil {
 		console.LogError("[scheduler] 텔레그램 요약 전송 실패: %v", err)
 	}
@@ -116,7 +116,6 @@ var watchInternalProcesses = map[string]string{
 var watchHostProcesses = []string{
 	"abledb_Hope scheduler",
 }
-
 
 // 요일별 필수 LOG 모듈 (월요일은 15시 이후부터 KIS 체크)
 var requiredModules = map[time.Weekday][]string{
@@ -236,7 +235,7 @@ func execStdin(prompt string) string {
 	}
 
 	var result struct {
-		Output string `json:"output"` 
+		Output string `json:"output"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		console.LogError("[execStdin] JSON decode error: %v", err)
@@ -521,7 +520,10 @@ func formatLogAnalyzeMsg(jsonStr string) string {
 	b.WriteString(fmt.Sprintf("  ERROR: %d건 %s\n\n", r.Summary.Errors, errMark))
 
 	if len(r.Modules) > 0 {
-		type kv struct{ k string; v int }
+		type kv struct {
+			k string
+			v int
+		}
 		var mods []kv
 		for k, v := range r.Modules {
 			mods = append(mods, kv{k, v})
@@ -538,7 +540,10 @@ func formatLogAnalyzeMsg(jsonStr string) string {
 		b.WriteString(fmt.Sprintf("【API 실패 현황 (%d건)】\n", r.APIFailures.Total))
 		b.WriteString(fmt.Sprintf("  http500 %d건 / timeout %d건 / 기타 %d건\n",
 			r.APIFailures.ByReason.HTTP500, r.APIFailures.ByReason.Timeout, r.APIFailures.ByReason.Other))
-		type kv struct{ k string; v int }
+		type kv struct {
+			k string
+			v int
+		}
 		var tasks []kv
 		for k, v := range r.APIFailures.ByTask {
 			tasks = append(tasks, kv{k, v})
@@ -622,7 +627,7 @@ func formatLogAnalyzeMsg(jsonStr string) string {
 	if r.News.Total > 0 {
 		b.WriteString(fmt.Sprintf("【뉴스 수집 현황】총 %s건\n", commaInt(r.News.Total)))
 		type newsCycle struct {
-			time       string
+			time      string
 			total, ok int
 		}
 		var cycles []newsCycle

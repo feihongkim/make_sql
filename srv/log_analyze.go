@@ -32,20 +32,20 @@ type LogAnalyzeResult struct {
 		Errors         int    `json:"errors"`
 		APIFailureRate string `json:"api_failure_rate"`
 	} `json:"summary"`
-	Modules        map[string]int            `json:"modules"`
-	APIFailures    LogAnalyzeAPIFailures     `json:"api_failures"`
-	ErrorLogs      []string                  `json:"error_logs"`
-	KISCompletions []string                  `json:"kis_completions"`
-	KISScheduler   KISSchedulerStatus        `json:"kis_scheduler"`
-	News           LogAnalyzeNews            `json:"news"`
-	AIAnalysis     struct{ Total int }       `json:"ai_analysis"`
+	Modules        map[string]int        `json:"modules"`
+	APIFailures    LogAnalyzeAPIFailures `json:"api_failures"`
+	ErrorLogs      []string              `json:"error_logs"`
+	KISCompletions []string              `json:"kis_completions"`
+	KISScheduler   KISSchedulerStatus    `json:"kis_scheduler"`
+	News           LogAnalyzeNews        `json:"news"`
+	AIAnalysis     struct{ Total int }   `json:"ai_analysis"`
 }
 
 type KISSchedulerStatus struct {
-	PID       string            `json:"pid"`
-	Completed []string          `json:"completed"`
-	Running   []string          `json:"running"`
-	Failed    []string          `json:"failed"`
+	PID       string   `json:"pid"`
+	Completed []string `json:"completed"`
+	Running   []string `json:"running"`
+	Failed    []string `json:"failed"`
 }
 
 type LogAnalyzeAPIFailures struct {
@@ -64,12 +64,12 @@ type LogAnalyzeNews struct {
 }
 
 var (
-	reCategoryTag    = regexp.MustCompile(`\[([^\]]+)\]\[([^\]]+)\]`)
-	reKISTask        = regexp.MustCompile(`\[([A-Z]{2}\.[A-Z_a-z]+)\]`)
-	reSchedulerPID   = regexp.MustCompile(`시작 \(PID (\d+)\)`)
-	reSchedulerDone  = regexp.MustCompile(`✓ (\S+) 완료`)
-	reSchedulerRun   = regexp.MustCompile(`▶ (.+)`)
-	reSchedulerFail  = regexp.MustCompile(`\[(\S+)\] 명령 \d+ 실패: (.+)`)
+	reCategoryTag   = regexp.MustCompile(`\[([^\]]+)\]\[([^\]]+)\]`)
+	reKISTask       = regexp.MustCompile(`\[([A-Z]{2}\.[A-Z_a-z]+)\]`)
+	reSchedulerPID  = regexp.MustCompile(`시작 \(PID (\d+)\)`)
+	reSchedulerDone = regexp.MustCompile(`✓ (\S+) 완료`)
+	reSchedulerRun  = regexp.MustCompile(`▶ (.+)`)
+	reSchedulerFail = regexp.MustCompile(`\[(\S+)\] 명령 \d+ 실패: (.+)`)
 )
 
 // HandleLogAnalyze 는 log-analyze 서브커맨드를 처리합니다
