@@ -18,8 +18,8 @@ type ServerTarget struct {
 
 func securityTargets() []ServerTarget {
 	return []ServerTarget{
-		{Name: "white", Host: "192.168.3.120", Port: "22", User: "feihong", IsSelf: true},
-		{Name: "TUF", Host: "192.168.3.130", Port: "22", User: "feihong"},
+		{Name: "white", Host: "100.68.156.109", Port: "22", User: "feihong", IsSelf: true},
+		{Name: "TUF", Host: "100.127.179.112", Port: "22", User: "feihong"},
 		{Name: "alvinii", Host: "100.110.254.111", Port: "2222", User: "alvinii"},
 	}
 }
