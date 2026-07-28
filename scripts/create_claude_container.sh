@@ -1,6 +1,7 @@
 #!/bin/bash
 #
-# claude 컨테이너 생성기 — 런북(docs/claude_docker_runbook.md) 3절 + 10-4절을 하나로.
+# claude 컨테이너 생성기 — 런북 3절 + 10-4절을 하나로.
+# 런북: ~/code/Jarvis/project/MakeSQL/claude_docker_runbook.md
 #
 # 사용법:
 #   ./scripts/create_claude_container.sh <PROJECT> [USER_ID]
