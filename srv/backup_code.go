@@ -58,7 +58,7 @@ func RunCodeBackup() {
 
 		elapsed := time.Since(startTime).Round(time.Second)
 		msg := fmt.Sprintf("[code_backup] %s → feisa:%s (소요 %v)", t.name, remoteDir, elapsed)
-		console.Log(msg)
+		console.Log("%s", msg)
 		fmt.Println(msg)
 	}
 
@@ -101,7 +101,7 @@ func backupMoodleData(dateStr string) {
 	logRsyncStats(string(out))
 
 	msg := fmt.Sprintf("[code_backup] moodle → feisa:%s (소요 %v)", moodleDst, elapsed)
-	console.Log(msg)
+	console.Log("%s", msg)
 	fmt.Println(msg)
 }
 
@@ -161,7 +161,6 @@ func backupRemoteToRemote(t backupTarget, remoteDir string) {
 	}
 	logRsyncStats(string(out))
 }
-
 
 func cleanupOldBackups(now time.Time) {
 	cutoff := now.AddDate(0, 0, -14).Format("060102")
