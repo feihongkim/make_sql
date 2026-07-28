@@ -37,13 +37,38 @@ go build -o abledb .
 
 ## 스케줄러
 
-`./abledb scheduler` 실행 시 자동으로 주기적 작업을 수행합니다:
+`./abledb scheduler` 실행 시 자동으로 주기적 작업을 수행합니다
+(정확한 목록은 `scheduler.BuildSchedule()` 이 기준입니다):
 
-- **매 3시간 :40** — MongoDB LOG 분석 → Telegram 전송
-- **매 3시간 :10** — Nginx 로그 보안 분석 → Telegram 전송
-- **매 3시간 :30** — 서버 보안 점검 (4대)
-- **매일 15:31** — 급등 종목 MDX 동기화
-- **매시 :17** — Notion 블로그 포스트 동기화
+| 주기 | 작업 |
+|---|---|
+| 매 3시간 :10 | Nginx 로그 보안 분석 → Telegram |
+| 매 3시간 :40 | MongoDB LOG 분석 → Telegram |
+| 매 3시간 :50 | 서버 온도 점검 |
+| 매시 :00 | 프로세스 감시 (watchdog) |
+| 매시 :17 | Notion 블로그 포스트 동기화 |
+| 08:00, 20:00 | 서버 보안 점검 (3대) |
+| 00:00 | 급등 종목 MDX 동기화 |
+| 03:00 | 코드 백업 |
+| 07:50 | RabbitMQ 큐 → MongoDB |
+| 07:01, 15:01, 22:01 | youtubeList |
+| 07:05, 15:05, 22:05 | youtubeContent |
+| 21:00 | 급등/급락 AI 분석 (TopReason) |
+
+### 상시 가동 (systemd)
+
+스케줄러는 다른 프로세스를 감시하는 쪽이므로 자신도 감시받아야 합니다.
+`scripts/abledb-scheduler.service` 를 설치하면 죽어도 10초 뒤 자동 재기동됩니다.
+
+```bash
+./abledb_Hope scheduler stop          # 수동 인스턴스를 먼저 내린다
+sudo cp scripts/abledb-scheduler.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now abledb-scheduler
+systemctl status abledb-scheduler
+```
+
+개별 작업이 패닉해도 스케줄러는 내려가지 않고, 패닉 내용이 Telegram 으로 통보됩니다.
 
 ## 설정 파일
 
