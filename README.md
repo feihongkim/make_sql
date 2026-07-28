@@ -19,8 +19,11 @@ go build -o abledb .
 ./abledb mongo [연결] [DB] [JSON|@파일]             MongoDB 명령 실행
 ./abledb log-analyze [연결] [시간(h)]              MongoDB LOG 분석
 ./abledb claude [프로젝트명] [프롬프트|@파일]        로컬 프로젝트 Claude 실행
-./abledb docker-claude [컨테이너명] [프롬프트]      Docker 컨테이너 Claude 실행
-./abledb send [컨테이너명] [프롬프트|@파일]          Docker Claude 세션에 메시지 전송
+./abledb ask [컨테이너명] [프롬프트|@파일] [옵션]    컨테이너 에이전트에 요청/응답
+    --new           일회성 실행 (문맥 없음, 세션 오염 없음)
+    --file 경로     자료 파일을 컨테이너에 올리고 경로만 전달 (반복 가능)
+    --host 이름     원격 호스트 SSH
+    --timeout 초    응답 대기 (기본 900)
 ./abledb surge-report [YYYYMMDD[-YYYYMMDD]] [옵션]  급등 종목 분석 MD 생성
 ./abledb copy [소스] [소스DB] [대상] [대상DB] ...   데이터 복사
 ./abledb security-check                            서버 보안 점검

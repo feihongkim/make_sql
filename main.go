@@ -34,7 +34,7 @@ func main() {
 	}
 
 	timeout := 5 * time.Minute
-	if len(os.Args) > 1 && (os.Args[1] == "copy" || os.Args[1] == "log-analyze" || os.Args[1] == "claude" || os.Args[1] == "docker-claude" || os.Args[1] == "send" || os.Args[1] == "surge-report" || os.Args[1] == "surge-sync" || os.Args[1] == "code-backup") {
+	if len(os.Args) > 1 && (os.Args[1] == "copy" || os.Args[1] == "log-analyze" || os.Args[1] == "claude" || os.Args[1] == "ask" || os.Args[1] == "surge-report" || os.Args[1] == "surge-sync" || os.Args[1] == "code-backup") {
 		timeout = 30 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -59,10 +59,8 @@ func main() {
 		srv.HandleLogAnalyze(ctx, cfg, subArgs)
 	case "claude":
 		srv.HandleClaude(ctx, subArgs)
-	case "docker-claude":
-		srv.HandleDockerClaude(ctx, subArgs)
-	case "send":
-		srv.HandleSend(ctx, subArgs)
+	case "ask":
+		srv.HandleAsk(ctx, subArgs)
 	case "surge-report":
 		srv.HandleSurgeReport(ctx, subArgs)
 	case "surge-sync":
@@ -116,8 +114,7 @@ func main() {
 		fmt.Println("  ./abledb mongo [연결] [DB] [JSON|@파일]       MongoDB 명령 실행")
 		fmt.Println("  ./abledb log-analyze [연결] [시간(h)]         MongoDB LOG 분석")
 		fmt.Println("  ./abledb claude [프로젝트명] [프롬프트|@파일]   Claude 코드 수정")
-		fmt.Println("  ./abledb docker-claude [컨테이너명] [프롬프트|@파일] Docker Claude 실행")
-		fmt.Println("  ./abledb send [컨테이너명] [프롬프트|@파일]      Docker Claude 세션에 안전하게 메시지 전송")
+		fmt.Println("  ./abledb ask [컨테이너명] [프롬프트|@파일] [--new] [--file 경로]  컨테이너 에이전트에 요청/응답")
 		fmt.Println("  ./abledb surge-report [YYYYMMDD[-YYYYMMDD]] [--out /path] [--server name]  급등 종목 분석 MD 생성")
 		fmt.Println("  ./abledb security-check                      서버 보안 점검 (3대)")
 		fmt.Println("  ./abledb scheduler [status|stop]             스케줄러 실행/관리")
