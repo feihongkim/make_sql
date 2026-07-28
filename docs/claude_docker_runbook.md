@@ -726,11 +726,16 @@ marketplace 원본 디렉토리는 **반드시 `~/.claude` 안에 둔다.** `kno
 절대경로가 저장되는데, 컨테이너에 없는 경로면 8-3과 같은 실패가 난다
 (`Marketplace ... failed to load: cache-miss` → 플러그인이 조용히 로드되지 않음).
 
+플러그인 소스는 별도 저장소로 관리한다. **동작 중인 디렉토리가 곧 저장소**라 별도 배포 단계가
+없고 사본 드리프트도 생기지 않는다.
+
+- 저장소: `git@github.com:feihongkim/claude_extension.git` (private)
+- 받는 위치: `~/.claude/marketplaces-local/makesql-channels` ← 디렉토리 이름은 이대로 유지한다
+  (marketplace 이름이 `makesql-channels` 이고 플러그인 참조가 `agentapi@makesql-channels` 이다)
+
 ```bash
-# 원본 위치 (호스트/컨테이너 동일 경로 + 공유 마운트 안)
-ls ~/.claude/marketplaces-local/makesql-channels/
-#   .claude-plugin/marketplace.json
-#   plugins/agentapi/{.claude-plugin,.mcp.json,package.json,server.ts}
+git clone git@github.com:feihongkim/claude_extension.git \
+  ~/.claude/marketplaces-local/makesql-channels
 
 claude plugin marketplace add ~/.claude/marketplaces-local/makesql-channels
 claude plugin install agentapi@makesql-channels
