@@ -58,20 +58,38 @@ go build -o abledb .
 | 07:05, 15:05, 22:05 | youtubeContent |
 | 21:00 | 급등/급락 AI 분석 (TopReason) |
 
-### 상시 가동 (systemd)
+### 상시 가동 (systemd — user 단위)
 
 스케줄러는 다른 프로세스를 감시하는 쪽이므로 자신도 감시받아야 합니다.
 `scripts/abledb-scheduler.service` 를 설치하면 죽어도 10초 뒤 자동 재기동됩니다.
 
+**system 이 아니라 user 단위로 둡니다.** 이 호스트의 sudo 는 비밀번호를 요구해서,
+`/etc/systemd/system` 에 두면 제어할 때마다 sudo 가 필요하고 비대화형 에이전트가
+스케줄러를 재시작할 수 없게 됩니다.
+
 ```bash
 ./abledb_Hope scheduler stop          # 수동 인스턴스를 먼저 내린다
-sudo cp scripts/abledb-scheduler.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now abledb-scheduler
-systemctl status abledb-scheduler
+mkdir -p ~/.config/systemd/user
+cp scripts/abledb-scheduler.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now abledb-scheduler
+
+sudo loginctl enable-linger feihong   # 1회만. 부팅 자동기동 + 로그아웃 후 유지
+```
+
+운영은 전부 sudo 없이 됩니다.
+
+```bash
+systemctl --user status abledb-scheduler
+systemctl --user restart abledb-scheduler      # 재빌드 후 반영
+journalctl --user -u abledb-scheduler -f
 ```
 
 개별 작업이 패닉해도 스케줄러는 내려가지 않고, 패닉 내용이 Telegram 으로 통보됩니다.
+
+> 등록 후에는 `./abledb_Hope scheduler stop` 이 무력합니다. SIGTERM 을 보내도
+> `Restart=always` 로 10초 뒤 되살아납니다. 멈추려면 `systemctl --user stop` 을 씁니다.
+> 코드를 고친 뒤에는 재빌드 + `systemctl --user restart` 를 해야 새 바이너리가 적용됩니다.
 
 ## 설정 파일
 
