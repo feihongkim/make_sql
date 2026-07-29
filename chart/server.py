@@ -75,6 +75,52 @@ def fetch_ohlcv(cfg: dict, source: str, symbol: str, date_from: str, date_to: st
     return df.astype(float)
 
 
+def fetch_name(cfg: dict, source: str, symbol: str) -> str:
+    """종목·지수 코드에 대응하는 표시 이름을 찾는다.
+
+    소스에 name: {table, key, value} 가 있을 때만 조회한다.
+    실패해도 차트는 그려야 하므로 예외를 삼키고 빈 문자열을 돌려준다.
+    """
+    src = cfg["sources"][source]
+    look = src.get("name")
+    if not look:
+        return ""
+    server = cfg["servers"][src["server"]]
+    sql = (f"SELECT TOP 1 [{look['value']}] FROM {look['table']} "
+           f"WHERE [{look['key']}] = %s")
+    try:
+        conn = pymssql.connect(
+            server=server["host"], port=int(server.get("port", 1433)),
+            user=DB_USER, password=DB_PASSWORD,
+            database=look.get("db", src["db"]),
+            timeout=QUERY_TIMEOUT, login_timeout=15,
+        )
+        try:
+            cur = conn.cursor()
+            cur.execute(sql, (symbol,))
+            row = cur.fetchone()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"이름 조회 실패({source}/{symbol}): {e}", flush=True)
+        return ""
+    if not row or not row[0]:
+        return ""
+    return _tidy_name(str(row[0]))
+
+
+def _tidy_name(s: str) -> str:
+    """업종명은 자간을 공백으로 채워 저장돼 있다 ("대   형  주", "운 수 창 고").
+
+    토막이 전부 한 글자면 자간 공백으로 보고 붙인다. 그렇지 않으면
+    정상 낱말 사이 공백이므로 건드리지 않는다 ("KRX 기후변화 솔루션").
+    """
+    parts = s.split()
+    if len(parts) > 1 and all(len(p) == 1 for p in parts):
+        return "".join(parts)
+    return " ".join(parts)
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, status: int, body: bytes, content_type: str):
         self.send_response(status)
@@ -119,7 +165,8 @@ class Handler(BaseHTTPRequestHandler):
             cfg = load_config()
             df = fetch_ohlcv(cfg, req["source"], req["symbol"], req["from"], req["to"])
             title = req.get("title") or cfg["sources"][req["source"]].get("title", "{symbol}")
-            png = render.render_png(df, title.format(symbol=req["symbol"]))
+            name = fetch_name(cfg, req["source"], req["symbol"])
+            png = render.render_png(df, title.format(symbol=req["symbol"], name=name).strip())
         except KeyError as e:
             return self._json(400, {"error": str(e).strip("'")})
         except ValueError as e:

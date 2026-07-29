@@ -30,7 +30,9 @@ sources:
     close: "CLOSE"
     volume: VOLUME
     where: "STICK_TYPE = 'D001'"
-    title: "{symbol} 일봉"
+    # 제목에 종목명을 붙인다. {name} 이 비면 코드만 나온다.
+    name: { table: dbo.STOCK_CODE, key: SHCODE, value: NAME }
+    title: "{symbol} {name} 일봉"
 
   # 해외 주식 일봉
   foreign_daily:
@@ -79,9 +81,19 @@ sources:
     where: "period_type = 'D'"
     title: "{symbol} 일봉 (KIS)"
 
-  # 업종 지수 — 컬럼 확인 후 활성화할 것
-  # upjong_daily:
-  #   server: white
-  #   db: hannam
-  #   table: dbo.upjongDaily
-  #   ...
+  # 업종 지수 (193종)
+  # SHCODE 가 3자리 숫자 코드라 이름 없이는 못 읽는다 → UPJONG_CODE 로 조회한다.
+  # ⚠️ 2026-06-05 에서 적재가 멈춰 있다. 최근 구간은 비어 있다.
+  upjong_daily:
+    server: white
+    db: hannam
+    table: dbo.upjongDaily
+    symbol: SHCODE
+    date: "DATE"
+    open: "OPEN"
+    high: "HIGH"
+    low: "LOW"
+    close: "CLOSE"
+    volume: VOLUME
+    name: { table: dbo.UPJONG_CODE, key: UPCODE, value: HNAME }
+    title: "{symbol} {name} (업종지수)"
