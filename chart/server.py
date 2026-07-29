@@ -21,7 +21,7 @@ import yaml
 import render
 
 PORT = int(os.environ.get("CHART_PORT", "8800"))
-CONFIG_PATH = os.environ.get("CHART_SOURCES", "/app/chart_sources.yaml")
+CONFIG_PATH = os.environ.get("CHART_SOURCES", "/app/config/chart_sources.yaml")
 DB_USER = os.environ.get("MSSQL_CHART_RO_USER", "chart_ro")
 DB_PASSWORD = os.environ.get("MSSQL_CHART_RO_PASSWORD", "")
 QUERY_TIMEOUT = int(os.environ.get("CHART_QUERY_TIMEOUT", "60"))

@@ -14,11 +14,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY render.py server.py ./
-# chart_sources.yaml 은 마운트한다. 소스를 추가할 때 재빌드하지 않기 위해서다.
+# config/ 는 마운트한다. 소스를 추가할 때 재빌드하지 않기 위해서다.
+# 파일이 아니라 디렉토리를 마운트해야 수정이 반영된다 (런북 8-2).
 
 ENV MPLBACKEND=Agg \
     PYTHONUNBUFFERED=1 \
-    CHART_SOURCES=/app/chart_sources.yaml
+    CHART_SOURCES=/app/config/chart_sources.yaml
 
 EXPOSE 8800
 CMD ["python", "server.py"]

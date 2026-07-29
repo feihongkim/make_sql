@@ -46,6 +46,39 @@ sources:
     volume: VOLUME
     title: "{symbol} (해외) 일봉"
 
+  # LS증권 일봉 (XingAPI t8410)
+  # in_gubun 은 조회 구분 — 2 가 일봉이다. 안 걸면 주/월봉이 섞인다.
+  # 종목 컬럼이 응답이 아니라 요청 파라미터(in_shcode)라는 점에 주의.
+  ls_daily:
+    server: white
+    db: LS
+    table: ST.t8410
+    symbol: in_shcode
+    date: "date"
+    open: "open"
+    high: "high"
+    low: "low"
+    close: "close"
+    volume: jdiff_vol        # 거래량
+    where: "in_gubun = '2'"
+    title: "{symbol} 일봉 (LS)"
+
+  # KIS 국내주식 기간별 시세
+  # period_type: D(일)/W(주)/M(월). 현재 적재된 것은 D 뿐이지만 명시해 둔다.
+  kis_daily:
+    server: TUF
+    db: KIS2
+    table: DM.BP_PeriodPrice
+    symbol: stck_shrn_iscd
+    date: stck_bsop_date
+    open: stck_oprc
+    high: stck_hgpr
+    low: stck_lwpr
+    close: stck_clpr
+    volume: acml_vol
+    where: "period_type = 'D'"
+    title: "{symbol} 일봉 (KIS)"
+
   # 업종 지수 — 컬럼 확인 후 활성화할 것
   # upjong_daily:
   #   server: white
