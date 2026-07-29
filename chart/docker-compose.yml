@@ -1,0 +1,28 @@
+services:
+  chart:
+    build: .
+    image: makesql_chart:1
+    container_name: makesql_chart
+    restart: unless-stopped
+
+    # pi·claude 컨테이너가 이름으로 부른다: http://makesql_chart:8800/chart
+    # 포트는 publish 하지 않는다. 호스트(abledb)는 docker exec 로 접근한다.
+    networks:
+      - pinet
+
+    # 호스트의 mssql 컨테이너(1433 publish)로 나가는 경로.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    environment:
+      # 조회 전용 계정. run_chart.sh 가 ~/.secrets/mssql_chart_ro.env 에서 읽어 넘긴다.
+      MSSQL_CHART_RO_USER: ${MSSQL_CHART_RO_USER}
+      MSSQL_CHART_RO_PASSWORD: ${MSSQL_CHART_RO_PASSWORD}
+
+    volumes:
+      # 소스 목록은 마운트한다. 항목을 추가할 때 재빌드·재시작이 필요 없다.
+      - ./chart_sources.yaml:/app/chart_sources.yaml:ro
+
+networks:
+  pinet:
+    external: true

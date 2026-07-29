@@ -1,0 +1,6 @@
+mplfinance==0.12.10b0
+matplotlib==3.10.8
+pandas
+numpy
+pymssql
+PyYAML

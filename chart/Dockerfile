@@ -1,0 +1,24 @@
+FROM python:3.12-slim
+
+# 한글 종목명·제목이 네모로 깨지지 않게 폰트를 이미지에 넣는다.
+# 호스트 폰트에 의존하면 "내 PC 에선 되는데" 가 생긴다.
+# fontconfig 을 함께 깔아야 한다. slim 이미지에는 fc-cache 가 없어서
+# 빠뜨리면 이 RUN 이 exit 100 으로 실패한다.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        fonts-nanum fontconfig curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && fc-cache -f
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY render.py server.py ./
+# chart_sources.yaml 은 마운트한다. 소스를 추가할 때 재빌드하지 않기 위해서다.
+
+ENV MPLBACKEND=Agg \
+    PYTHONUNBUFFERED=1 \
+    CHART_SOURCES=/app/chart_sources.yaml
+
+EXPOSE 8800
+CMD ["python", "server.py"]

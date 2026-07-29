@@ -1,0 +1,54 @@
+# 차트를 그릴 수 있는 테이블 목록.
+#
+# 여기 등록된 것만 그린다. 새 테이블이 필요하면 항목을 추가하면 되고,
+# 컬럼 이름이 달라도 Go/Python 코드는 고치지 않는다.
+#
+# DB 접속은 조회 전용 계정(chart_ro)을 쓴다. 자격증명은 환경변수로 주입한다
+# (~/.secrets/mssql_chart_ro.env → run_chart.sh 가 읽어 넘긴다).
+
+servers:
+  white:
+    # 차트 컨테이너에서 호스트의 mssql 컨테이너(1433 publish)로 나간다.
+    # extra_hosts 로 host.docker.internal 을 host-gateway 에 연결해 둔다.
+    host: host.docker.internal
+    port: 1433
+  TUF:
+    host: 100.127.179.112     # Tailscale
+    port: 1433
+
+sources:
+  # 국내 주식 일봉 — 1985~ , 1,500만 건
+  kor_daily:
+    server: white
+    db: hannam
+    table: dbo.STOCK_PRICE_KOR_D001
+    symbol: SHCODE
+    date: "DATE"              # nvarchar 'YYYYMMDD'
+    open: "OPEN"
+    high: "HIGH"
+    low: "LOW"
+    close: "CLOSE"
+    volume: VOLUME
+    where: "STICK_TYPE = 'D001'"
+    title: "{symbol} 일봉"
+
+  # 해외 주식 일봉
+  foreign_daily:
+    server: white
+    db: hannam
+    table: dbo.ForeignStockDaily
+    symbol: SHCODE
+    date: "DATE"
+    open: "OPEN"
+    high: "HIGH"
+    low: "LOW"
+    close: "CLOSE"
+    volume: VOLUME
+    title: "{symbol} (해외) 일봉"
+
+  # 업종 지수 — 컬럼 확인 후 활성화할 것
+  # upjong_daily:
+  #   server: white
+  #   db: hannam
+  #   table: dbo.upjongDaily
+  #   ...

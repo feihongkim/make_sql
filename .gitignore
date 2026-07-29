@@ -21,6 +21,10 @@ Dockerfile
 docker-compose.yml
 docker-config/
 
+# 단 차트 서비스 구성은 추적한다 (MakeSQL 기능의 일부다)
+!chart/Dockerfile
+!chart/docker-compose.yml
+
 # MCP
 mcp/notion/
 
