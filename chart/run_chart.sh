@@ -35,5 +35,4 @@ esac
 echo
 echo "확인:"
 echo "  docker exec makesql_chart curl -sS http://127.0.0.1:8800/health   # 등록된 소스"
-echo "  docker exec makesql_chart curl -sS http://127.0.0.1:8800/health"
 echo "  ./abledb chart kor_daily 005930 --from 20260101 --to 20260720"
