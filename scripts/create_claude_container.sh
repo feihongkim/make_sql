@@ -299,6 +299,18 @@ EOF
   for d in channels projects sessions shell-snapshots file-history debug ide session-env; do
     echo "      - $WORKSPACE/.claude-state/$d:/home/$HOST_USER/.claude/$d"
   done
+  cat <<'EOF'
+
+    # pi 계층과 같은 네트워크에 둔다. 컨테이너 이름으로 서로 부를 수 있어야
+    # 공용 서비스(차트 렌더러 등)를 claude·pi 양쪽에서 함께 쓸 수 있다.
+    # 이게 없으면 별도 compose 네트워크에 갇혀 이름 해석이 안 된다.
+    networks:
+      - pinet
+
+networks:
+  pinet:
+    external: true
+EOF
 } > docker-compose.yml
 
 # --- .gitignore -------------------------------------------------------------
