@@ -27,15 +27,36 @@ func loadConfig(path string) (*console.Config, error) {
 	return &cfg, nil
 }
 
+const (
+	defaultTimeout     = 5 * time.Minute
+	longRunningTimeout = 30 * time.Minute
+)
+
+// longRunningCommands 는 30분 타임아웃을 받는 서브커맨드입니다.
+//
+// 여기 없는 명령은 defaultTimeout 이 적용됩니다. 오래 걸리는 명령을 추가하고
+// 이 표에 넣지 않으면 5분에 조용히 잘리므로, 새 서브커맨드를 만들 때 함께
+// 확인해야 합니다. (|| 로 이어 붙인 조건문보다 빠진 것을 눈으로 찾기 쉽습니다.)
+var longRunningCommands = map[string]bool{
+	"copy":         true,
+	"log-analyze":  true,
+	"claude":       true,
+	"ask":          true,
+	"chart":        true,
+	"surge-report": true,
+	"surge-sync":   true,
+	"code-backup":  true,
+}
+
 func main() {
 	cfg, err := loadConfig("config.yaml")
 	if err != nil {
 		log.Fatalf("설정 로드 실패: %v", err)
 	}
 
-	timeout := 5 * time.Minute
-	if len(os.Args) > 1 && (os.Args[1] == "copy" || os.Args[1] == "log-analyze" || os.Args[1] == "claude" || os.Args[1] == "ask" || os.Args[1] == "chart" || os.Args[1] == "surge-report" || os.Args[1] == "surge-sync" || os.Args[1] == "code-backup") {
-		timeout = 30 * time.Minute
+	timeout := defaultTimeout
+	if len(os.Args) > 1 && longRunningCommands[os.Args[1]] {
+		timeout = longRunningTimeout
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
