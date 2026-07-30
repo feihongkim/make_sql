@@ -78,49 +78,57 @@ def _addplots(df: pd.DataFrame):
 
 
 # boxcalc 출력의 kind/boxtype 코드 (RESTGo box/types.go 정합)
-KIND_BOX, KIND_MAIN, KIND_DEF = 0, 1, 2
+KIND_MAIN = 1
 BOXTYPE_SUPPORT, BOXTYPE_RESIST = 0, 1
+
+_BOX_STYLE = {
+    BOXTYPE_SUPPORT: ("^", "#27ae60", "SupportBox"),
+    BOXTYPE_RESIST: ("v", "#2980b9", "ResistBox"),
+}
+MAINBOX_COLOR = "#f39c12"
 
 
 def _draw_boxes(ax, boxes: list, df: pd.DataFrame) -> None:
-    """boxcalc 가 계산한 Box 목록을 가격 축에 수평선으로 얹는다.
+    """boxcalc 가 계산한 Box 를 캔들 위에 얹는다.
+
+    표시 규칙:
+      - 모든 Box — 생성 위치에 ▲(지지) / ▼(저항) 마커
+      - MainBox  — 생성 위치부터 우측 끝까지 수평선 (주황 파선)
+
+    MainBox 외에는 수평선을 긋지 않는다. 박스가 20~30개씩 나오는 구간에서
+    전부 그으면 선이 캔들과 이동평균을 덮어 차트를 읽을 수 없게 된다.
+    MainBox 는 개수가 적고 기준선으로 쓰이므로 남긴다.
 
     x 좌표: mplfinance 캔들은 정수 인덱스(0..n-1)로 배치되고, boxcalc 의
     pos 는 입력 캔들 인덱스라 서로 그대로 대응한다 (server.py 가 df 순서
-    그대로 boxcalc 에 넘긴다). 선은 박스 생성 위치부터 우측 끝까지 긋는다.
+    그대로 boxcalc 에 넘긴다).
     """
     n = len(df)
     y_lo, y_hi = ax.get_ylim()
     from matplotlib.lines import Line2D
 
-    seen_labels = set()
+    seen = set()
+    has_main = False
     for b in boxes:
         price = b["price"]
         if price < y_lo or price > y_hi:
             continue  # 표시 구간 밖 박스는 축을 망가뜨리지 않게 건너뛴다
+        marker, color, label = _BOX_STYLE[b["boxtype"]]
         x0 = max(0, min(b["pos"], n - 1))
+        if b["kind"] == KIND_MAIN:
+            ax.hlines(y=price, xmin=x0, xmax=n - 1, colors=MAINBOX_COLOR,
+                      linewidths=1.4, linestyles="--", zorder=4)
+            has_main = True
+        ax.scatter(x0, price, color=color, s=28, marker=marker, zorder=5)
+        seen.add((label, marker, color))
 
-        if b["kind"] == KIND_DEF:
-            color, lw, ls, label, z = "#e74c3c", 1.8, "-", "DefBox", 5
-        elif b["kind"] == KIND_MAIN:
-            color, lw, ls, label, z = "#f39c12", 1.4, "--", "MainBox", 4
-        elif b["boxtype"] == BOXTYPE_SUPPORT:
-            color, lw, ls, label, z = "#27ae60", 1.0, ":", "SupportBox", 3
-        else:
-            color, lw, ls, label, z = "#2980b9", 1.0, ":", "ResistBox", 3
-
-        ax.hlines(y=price, xmin=x0, xmax=n - 1, colors=color,
-                  linewidths=lw, linestyles=ls, zorder=z)
-        marker = "v" if b["boxtype"] == BOXTYPE_RESIST else "^"
-        ax.scatter(x0, price, color=color, s=28, marker=marker, zorder=z + 1)
-        if b["kind"] == KIND_DEF:
-            ax.annotate(f" {price:,.0f}", xy=(n - 1, price), color=color,
-                        fontsize=7, va="center", zorder=6)
-        seen_labels.add((label, color, lw, ls))
-
-    if seen_labels:
-        handles = [Line2D([0], [0], color=c, lw=w, ls=s, label=lab)
-                   for lab, c, w, s in sorted(seen_labels)]
+    handles = [Line2D([0], [0], marker=m, color=c, label=lab,
+                      linestyle="none", markersize=5)
+               for lab, m, c in sorted(seen)]
+    if has_main:
+        handles.append(Line2D([0], [0], color=MAINBOX_COLOR, lw=1.4,
+                              ls="--", label="MainBox"))
+    if handles:
         ax.legend(handles=handles, loc="upper left", fontsize=7)
 
 

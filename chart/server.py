@@ -5,7 +5,8 @@
   GET  /sources                                   → 등록된 소스 상세
 
 "boxes": true 면 RESTGo 의 boxcalc 바이너리(/app/bin/boxcalc, 정적 Go)로
-Box/MainBox/DefBox 를 계산해 수평선으로 얹는다. Box 로직의 단일 소스는
+Box 를 계산해 생성 위치에 삼각형 마커로 얹는다 (▲지지 / ▼저항).
+수평선은 MainBox 만 긋는다 — 전부 그으면 차트를 덮는다. Box 로직의 단일 소스는
 RESTGo 저장소이며, 바이너리 갱신은 RESTGo 의 deploy/build_boxcalc.sh →
 이미지 재빌드로 한다.
 
