@@ -1,8 +1,13 @@
 """차트 렌더링 HTTP 서비스.
 
-  POST /chart   {"source","symbol","from","to"}  → image/png
+  POST /chart   {"source","symbol","from","to"[,"boxes":true]}  → image/png
   GET  /health                                    → {"ok", "sources": [...]}
   GET  /sources                                   → 등록된 소스 상세
+
+"boxes": true 면 RESTGo 의 boxcalc 바이너리(/app/bin/boxcalc, 정적 Go)로
+Box/MainBox/DefBox 를 계산해 수평선으로 얹는다. Box 로직의 단일 소스는
+RESTGo 저장소이며, 바이너리 갱신은 RESTGo 의 deploy/build_boxcalc.sh →
+이미지 재빌드로 한다.
 
 pinet 위에 있으므로 pi·claude 컨테이너가 컨테이너 이름으로 호출한다.
     curl -XPOST http://makesql_chart:8800/chart -d '{"source":"kor_daily",...}'
@@ -12,6 +17,7 @@ DB 는 조회 전용 계정(chart_ro)으로만 접근한다. 계정 정보는 �
 
 import json
 import os
+import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pandas as pd
@@ -26,6 +32,35 @@ DB_USER = os.environ.get("MSSQL_CHART_RO_USER", "chart_ro")
 DB_PASSWORD = os.environ.get("MSSQL_CHART_RO_PASSWORD", "")
 QUERY_TIMEOUT = int(os.environ.get("CHART_QUERY_TIMEOUT", "60"))
 MAX_ROWS = int(os.environ.get("CHART_MAX_ROWS", "5000"))
+BOXCALC_BIN = os.environ.get("BOXCALC_BIN", "/app/bin/boxcalc")
+
+
+def compute_boxes(df, symbol: str) -> list:
+    """boxcalc(RESTGo Go 바이너리)로 Box 목록을 계산한다.
+
+    입력은 fetch_ohlcv 가 돌려준 DataFrame 그대로 — 행 순서가 boxcalc 의
+    pos 인덱스가 되므로 정렬을 바꾸면 안 된다. 실패는 예외로 올린다
+    (boxes 를 명시적으로 요청한 호출자에게 조용한 누락은 오판을 만든다).
+    """
+    payload = {
+        "shcode": symbol,
+        "candles": [
+            {
+                "date": idx.strftime("%Y%m%d"),
+                "open": float(row.Open), "high": float(row.High),
+                "low": float(row.Low), "close": float(row.Close),
+                "volume": float(row.Volume),
+            }
+            for idx, row in zip(df.index, df.itertuples())
+        ],
+    }
+    proc = subprocess.run(
+        [BOXCALC_BIN], input=json.dumps(payload).encode(),
+        capture_output=True, timeout=30,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"boxcalc 실패: {proc.stderr.decode(errors='replace').strip()}")
+    return json.loads(proc.stdout)["boxes"]
 
 
 def load_config() -> dict:
@@ -166,7 +201,8 @@ class Handler(BaseHTTPRequestHandler):
             df = fetch_ohlcv(cfg, req["source"], req["symbol"], req["from"], req["to"])
             title = req.get("title") or cfg["sources"][req["source"]].get("title", "{symbol}")
             name = fetch_name(cfg, req["source"], req["symbol"])
-            png = render.render_png(df, title.format(symbol=req["symbol"], name=name).strip())
+            boxes = compute_boxes(df, req["symbol"]) if req.get("boxes") else None
+            png = render.render_png(df, title.format(symbol=req["symbol"], name=name).strip(), boxes=boxes)
         except KeyError as e:
             return self._json(400, {"error": str(e).strip("'")})
         except ValueError as e:
