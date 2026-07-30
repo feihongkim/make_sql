@@ -104,7 +104,7 @@ var watchContainers = []string{
 	"dart_pi", "drawchart_pi", "jarvis_pi", "kis2_pi", "ls_pi",
 	"MC_pi", "pyforme_pi", "pyforme2_pi", "stocktopreason_pi", "youtubeContent_pi",
 	"dbsender_pi", "makesql_pi", "mkyoutube_pi", "news_pi",
-	"ontology_pi", "restgo_pi", "restgo2_pi", "rstudio_pi", "saver_pi", "upbit_pi",
+	"ontology_pi", "restgo_pi", "rstudio_pi", "saver_pi", "upbit_pi",
 }
 
 // 컨테이너 내부 프로세스 감시 대상 {컨테이너명: 프로세스 패턴}
