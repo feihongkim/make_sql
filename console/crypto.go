@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"log"
 	"math/big"
 )
 
@@ -87,12 +86,17 @@ func firstDecode(encText, myKey string) (string, error) {
 	}
 
 	nonceSize := aesGCM.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return "", fmt.Errorf("암호문이 너무 짧습니다 (%d < nonce %d)", len(ciphertext), nonceSize)
+	}
 	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
 
+	// 여기서 프로세스를 죽이지 않는다. 예전에는 log.Fatalf 였는데, 라이브러리
+	// 함수가 os.Exit 을 부르면 config 한 줄이 어긋났을 때 스케줄러가 이유도
+	// 남기지 않고 사라진다. 판단은 호출자(loadConfig)가 한다.
 	plaintext, err := aesGCM.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		log.Fatalf("err : %s", err)
-		return "", err
+		return "", fmt.Errorf("복호화 실패 (FKEY 가 맞는지 확인하세요): %w", err)
 	}
 
 	return string(plaintext), nil
@@ -116,16 +120,30 @@ func secondDecode(encoded string) (string, error) {
 	return original, nil
 }
 
-func GetKey(env EnvType) string {
+// GetKey 는 FKEY 에서 AES 키를 복원합니다.
+func GetKey(env EnvType) (string, error) {
+	if len(env.FKEY) < 2 {
+		return "", fmt.Errorf("config.yaml 의 FKEY 가 비었거나 너무 짧습니다")
+	}
 	base64Str := env.FKEY[:len(env.FKEY)-1] + "="
-	decodKye, _ := base64.StdEncoding.DecodeString(base64Str)
-	return string(decodKye)
+	key, err := base64.StdEncoding.DecodeString(base64Str)
+	if err != nil {
+		return "", fmt.Errorf("FKEY 디코딩 실패: %w", err)
+	}
+	return string(key), nil
 }
 
-func GetDecode(firstEncode, mainKey string) string {
-	firstDecode, _ := firstDecode(firstEncode, mainKey)
-	finalDecode, _ := secondDecode(firstDecode)
-	return finalDecode
+// GetDecode 는 암호화된 설정값을 복호화합니다.
+//
+// 에러를 삼키지 않는다. 예전에는 두 단계의 에러를 모두 버리고 빈 문자열을
+// 돌려줬는데, 그러면 자격증명이 빈 값인 채로 기동해서 실패가 DB 연결 시점의
+// 엉뚱한 메시지로 나타난다.
+func GetDecode(encoded, mainKey string) (string, error) {
+	decrypted, err := firstDecode(encoded, mainKey)
+	if err != nil {
+		return "", err
+	}
+	return secondDecode(decrypted)
 }
 
 func GetEncode(s string, mainKey string) string {

@@ -156,20 +156,42 @@ func loadConfig() error {
 	// 기본값 설정
 	setDefaults()
 
-	// 암호화된 필드 복호화
-	mainKey := GetKey(*Env)
-	Env.MSSQL_USER = GetDecode(Env.MSSQL_USER, mainKey)
-	Env.MSSQL_PASSWORD = GetDecode(Env.MSSQL_PASSWORD, mainKey)
-	Env.MSSQL_PORT = GetDecode(Env.MSSQL_PORT, mainKey)
+	// 암호화된 필드 복호화.
+	// 실패하면 여기서 멈춘다. 빈 자격증명으로 기동하면 원인이 DB 연결 실패로
+	// 둔갑해서 FKEY 문제라는 걸 알아채기 어렵다.
+	mainKey, err := GetKey(*Env)
+	if err != nil {
+		return err
+	}
+	for _, f := range []struct {
+		name  string
+		field *string
+	}{
+		{"MSSQL_USER", &Env.MSSQL_USER},
+		{"MSSQL_PASSWORD", &Env.MSSQL_PASSWORD},
+		{"MSSQL_PORT", &Env.MSSQL_PORT},
+	} {
+		v, err := GetDecode(*f.field, mainKey)
+		if err != nil {
+			return fmt.Errorf("%s 복호화 실패: %w", f.name, err)
+		}
+		*f.field = v
+	}
 	// MSSQL_ADDR_서버이름 복호화
 	Env.MSSQLAddrs = make(map[string]string)
 	for key, val := range rawMap {
-		if strings.HasPrefix(key, "MSSQL_ADDR_") {
-			serverName := strings.TrimPrefix(key, "MSSQL_ADDR_")
-			if encAddr, ok := val.(string); ok {
-				Env.MSSQLAddrs[serverName] = GetDecode(encAddr, mainKey)
-			}
+		if !strings.HasPrefix(key, "MSSQL_ADDR_") {
+			continue
 		}
+		encAddr, ok := val.(string)
+		if !ok {
+			continue
+		}
+		addr, err := GetDecode(encAddr, mainKey)
+		if err != nil {
+			return fmt.Errorf("%s 복호화 실패: %w", key, err)
+		}
+		Env.MSSQLAddrs[strings.TrimPrefix(key, "MSSQL_ADDR_")] = addr
 	}
 
 	// 로그 레벨 초기화
