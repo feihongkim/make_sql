@@ -32,13 +32,13 @@ type LogAnalyzeResult struct {
 		Errors         int    `json:"errors"`
 		APIFailureRate string `json:"api_failure_rate"`
 	} `json:"summary"`
-	Modules        map[string]int        `json:"modules"`
-	APIFailures    LogAnalyzeAPIFailures `json:"api_failures"`
-	ErrorLogs      []string              `json:"error_logs"`
-	KISCompletions []string              `json:"kis_completions"`
-	KISScheduler   KISSchedulerStatus    `json:"kis_scheduler"`
-	News           LogAnalyzeNews        `json:"news"`
-	AIAnalysis     struct{ Total int }   `json:"ai_analysis"`
+	Modules      map[string]int        `json:"modules"`
+	APIFailures  LogAnalyzeAPIFailures `json:"api_failures"`
+	ErrorLogs    []string              `json:"error_logs"`
+	Completions  []string              `json:"completions"`
+	KISScheduler KISSchedulerStatus    `json:"kis_scheduler"`
+	News         LogAnalyzeNews        `json:"news"`
+	AIAnalysis   struct{ Total int }   `json:"ai_analysis"`
 }
 
 type KISSchedulerStatus struct {
@@ -132,7 +132,7 @@ func HandleLogAnalyze(ctx context.Context, cfg *console.Config, args []string) {
 	apiFailByTask := map[string]int{}
 	apiReasons := struct{ http500, timeout, other int }{}
 	var errorLogs []string
-	var kisCompletions []string
+	var completions []string
 	var newsDetails []string
 	totalLogs := 0
 	apiFailTotal := 0
@@ -207,14 +207,16 @@ func HandleLogAnalyze(ctx context.Context, cfg *console.Config, args []string) {
 				}
 			}
 
-			// KIS 완료
-			if strings.Contains(msg, "[KIS][pipeline]") && strings.Contains(msg, "완료:") {
-				if len(kisCompletions) < 30 {
+			// 프로젝트 완료 이벤트. 새 프로젝트가 붙으면 여기에 토큰만 추가한다.
+			// 표시는 scheduler/tasks.go 의 formatLogAnalyzeMsg 가 프로젝트별로 나눠 한다.
+			if (strings.Contains(msg, "[KIS][pipeline]") || strings.Contains(msg, "[LS][scheduler]")) &&
+				strings.Contains(msg, "완료:") {
+				if len(completions) < 60 {
 					truncMsg := msg
 					if len(truncMsg) > 150 {
 						truncMsg = truncMsg[:150]
 					}
-					kisCompletions = append(kisCompletions, truncMsg)
+					completions = append(completions, truncMsg)
 				}
 			}
 
@@ -288,7 +290,7 @@ func HandleLogAnalyze(ctx context.Context, cfg *console.Config, args []string) {
 	result.APIFailures.ByReason.Other = apiReasons.other
 
 	result.ErrorLogs = errorLogs
-	result.KISCompletions = kisCompletions
+	result.Completions = completions
 
 	// KIS 스케줄러 상태
 	result.KISScheduler.PID = schedulerPID

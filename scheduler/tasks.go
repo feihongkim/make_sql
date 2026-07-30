@@ -558,11 +558,23 @@ func formatLogAnalyzeMsg(jsonStr string) string {
 		b.WriteString("\n")
 	}
 
-	if len(r.KISCompletions) > 0 {
+	// 완료 이벤트는 프로젝트별로 메시지 형식이 달라 섹션을 나눠 표시한다.
+	// KIS 는 [BD.DailyPrice] 처럼 태스크명이 대괄호로 오고, LS 는 "job 완료: 내용" 형태다.
+	var kisComps, lsComps []string
+	for _, c := range r.Completions {
+		switch {
+		case strings.Contains(c, "[KIS][pipeline]"):
+			kisComps = append(kisComps, c)
+		case strings.Contains(c, "[LS][scheduler]"):
+			lsComps = append(lsComps, c)
+		}
+	}
+
+	if len(kisComps) > 0 {
 		taskMap := make(map[string]string)
 		taskOrder := []string{}
 		reTask := regexp.MustCompile(`\[([A-Z]{2}\.[A-Z_a-z]+)\]`)
-		for _, comp := range r.KISCompletions {
+		for _, comp := range kisComps {
 			m := reTask.FindStringSubmatch(comp)
 			if m == nil {
 				continue
@@ -607,6 +619,36 @@ func formatLogAnalyzeMsg(jsonStr string) string {
 			}
 		}
 		b.WriteString("\n")
+	}
+
+	if len(lsComps) > 0 {
+		// "[LS][scheduler] [INFO] credit-trading 완료: 359청크 4298건 (227분)"
+		//                          └ job ┘        └──── detail ────┘
+		reLS := regexp.MustCompile(`\[LS\]\[\w+\]\s+\[\w+\]\s+(.+?)\s+완료:\s*(.*)`)
+		jobMap := make(map[string]string)
+		jobOrder := []string{}
+		for _, comp := range lsComps {
+			m := reLS.FindStringSubmatch(comp)
+			if m == nil {
+				continue
+			}
+			job := m[1]
+			if _, exists := jobMap[job]; !exists {
+				jobOrder = append(jobOrder, job)
+			}
+			jobMap[job] = strings.TrimSpace(m[2]) // 같은 job 이 여러 번이면 마지막 것
+		}
+		if len(jobOrder) > 0 {
+			b.WriteString(fmt.Sprintf("【LS 수집 완료 (%d개 job)】\n", len(jobOrder)))
+			for _, job := range jobOrder {
+				detail := jobMap[job]
+				if len(detail) > 60 {
+					detail = detail[:60]
+				}
+				b.WriteString(fmt.Sprintf("  %s | %s\n", job, detail))
+			}
+			b.WriteString("\n")
+		}
 	}
 
 	ks := r.KISScheduler
