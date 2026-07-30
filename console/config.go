@@ -43,7 +43,13 @@ type EnvType struct {
 	LOG_LEVEL string `yaml:"LOG_LEVEL"`
 
 	// Telegram 알림 설정
-	TELEGRAM_ENABLED bool `yaml:"TELEGRAM_ENABLED"`
+	//
+	// 토큰과 chat_id 는 config.yaml 에만 둔다 (소스 하드코딩 금지 — 저장소에 올라간다).
+	// FKEY 로 암호화하지 않는다. 키가 같은 파일에 있어 보호가 되지 않고,
+	// config.yaml 자체가 .gitignore + 제한 권한으로 관리되는 것이 실제 방어선이다.
+	TELEGRAM_ENABLED   bool   `yaml:"TELEGRAM_ENABLED"`
+	TELEGRAM_BOT_TOKEN string `yaml:"TELEGRAM_BOT_TOKEN"`
+	TELEGRAM_CHAT_ID   string `yaml:"TELEGRAM_CHAT_ID"`
 }
 
 // GetMSSQLAddr 는 서버 이름으로 MSSQL 주소를 반환합니다
