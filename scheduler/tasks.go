@@ -246,8 +246,13 @@ func execStdin(prompt string) string {
 	return result.Output
 }
 
-// 이전 알림 상태 (중복 방지)
-var lastAlertState = make(map[string]bool)
+// 직전에 알린 이슈 목록 (중복 알림 방지). 빈 문자열이면 "이상 없음" 상태다.
+//
+// 예전에는 map[string]bool 에 담고 "값이 true 인 아무 키" 를 맵 순회로 뽑아
+// 이전 키를 복원했다. 맵 순회 순서는 무작위라 true 인 키가 둘 이상이면 결과가
+// 비결정적이 된다 — 실제로는 항상 하나만 true 여서 우연히 동작했을 뿐이다.
+// 표현하려던 것이 값 하나였으므로 문자열 하나로 둔다.
+var lastIssueKey string
 
 func (s *Scheduler) runProcessCheck() {
 	var issues []string
@@ -288,17 +293,11 @@ func (s *Scheduler) runProcessCheck() {
 
 	// 이슈 상태 변화 감지
 	currentKey := strings.Join(issues, "|")
-	prevKey := ""
-	for k, v := range lastAlertState {
-		if v {
-			prevKey = k
-		}
-	}
 
 	if len(issues) == 0 {
-		if prevKey != "" {
+		if lastIssueKey != "" {
 			// 복구됨
-			lastAlertState[prevKey] = false
+			lastIssueKey = ""
 			if err := srv.SendTelegramMsg("✅ [프로세스 감시] 모든 이상 복구됨"); err != nil {
 				console.LogError("[scheduler] process-check 텔레그램 전송 실패: %v", err)
 			}
@@ -308,14 +307,13 @@ func (s *Scheduler) runProcessCheck() {
 	}
 
 	// 이전과 동일한 이슈면 알림 생략
-	if currentKey == prevKey {
+	if currentKey == lastIssueKey {
 		console.Log("[scheduler] process-check: 이전과 동일한 이슈 — 알림 생략")
 		return
 	}
 
 	// 새 이슈 발생
-	lastAlertState[prevKey] = false
-	lastAlertState[currentKey] = true
+	lastIssueKey = currentKey
 
 	var msg strings.Builder
 	msg.WriteString(fmt.Sprintf("⚠️ [프로세스 감시] %d건 이상 감지\n\n", len(issues)))
@@ -352,51 +350,36 @@ func (s *Scheduler) runYoutubeContent() {
 
 // --- 서브프로세스 ---
 
+// 자식 프로세스 하나가 스케줄러의 다음 실행까지 막지 않도록 상한을 둔다.
+const subprocessTimeout = 10 * time.Minute
+
+// execOutputDir 은 dir 에서 명령을 실행하고 stdout 을 돌려줍니다.
+// dir 이 빈 문자열이면 현재 디렉토리에서 실행합니다.
+//
+// 타임아웃은 CommandContext 에 맡긴다. 예전에는 goroutine + select 로 직접
+// 재던 탓에, 시간이 다 되면 cmd.Process.Kill() 을 부르면서도 결과를 쓰는
+// goroutine 은 그대로 남았다. 컨텍스트가 만료되면 런타임이 프로세스를 정리한다.
 func execOutputDir(dir, bin string, args []string) string {
-	cmd := exec.Command(bin, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), subprocessTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = dir
 	cmd.Stderr = os.Stderr
-	done := make(chan error, 1)
-	var out []byte
-	var cmdErr error
-	go func() {
-		out, cmdErr = cmd.Output()
-		done <- cmdErr
-	}()
-	select {
-	case <-done:
-		if cmdErr != nil {
-			console.LogError("[subprocess] 실행 오류: %v", cmdErr)
-		}
-		return string(out)
-	case <-time.After(10 * time.Minute):
-		cmd.Process.Kill()
-		console.LogError("[subprocess] 타임아웃 (10분)")
+
+	out, err := cmd.Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		console.LogError("[subprocess] 타임아웃 (%v): %s", subprocessTimeout, bin)
 		return ""
 	}
+	if err != nil {
+		console.LogError("[subprocess] 실행 오류: %v", err)
+	}
+	return string(out)
 }
 
 func execOutput(bin string, args []string) string {
-	cmd := exec.Command(bin, args...)
-	cmd.Stderr = os.Stderr
-	done := make(chan error, 1)
-	var out []byte
-	var cmdErr error
-	go func() {
-		out, cmdErr = cmd.Output()
-		done <- cmdErr
-	}()
-	select {
-	case <-done:
-		if cmdErr != nil {
-			console.LogError("[subprocess] 실행 오류: %v", cmdErr)
-		}
-		return string(out)
-	case <-time.After(10 * time.Minute):
-		cmd.Process.Kill()
-		console.LogError("[subprocess] 타임아웃 (10분)")
-		return ""
-	}
+	return execOutputDir("", bin, args)
 }
 
 func getExecDir(self string) string {
