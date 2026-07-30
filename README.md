@@ -24,6 +24,11 @@ go build -o abledb .
     --file 경로     자료 파일을 컨테이너에 올리고 경로만 전달 (반복 가능)
     --host 이름     원격 호스트 SSH
     --timeout 초    응답 대기 (기본 900)
+./abledb chart [소스] [종목] [옵션]                 DB 데이터로 캔들차트 PNG 생성
+    --from/--to YYYYMMDD  구간 (기본: 최근 6개월)
+    --boxes         Box 마커 ▲▼ + MainBox 수평선 (RESTGo boxcalc)
+    --telegram      완성된 차트를 텔레그램으로 전송
+    --out/--title   저장 위치 / 제목
 ./abledb surge-report [YYYYMMDD[-YYYYMMDD]] [옵션]  급등 종목 분석 MD 생성
 ./abledb copy [소스] [소스DB] [대상] [대상DB] ...   데이터 복사
 ./abledb security-check                            서버 보안 점검
