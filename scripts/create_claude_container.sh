@@ -20,6 +20,11 @@
 # 이 스크립트는 여러 번 돌려도 안전하다. 매번 완전한 세트를 생성하므로
 # agentapi 배선이 빠지거나 덮어써지는 일이 없다.
 #
+# 워크스페이스에 두면 동작이 바뀌는 파일 (둘 다 사람이 만든다):
+#   tele.token   봇 토큰 한 줄. 있으면 텔레그램 채널을 켠다. USER_ID 가 함께 필요하다.
+#   mount-ssh    빈 파일이어도 된다. 있으면 호스트의 ~/.ssh 를 읽기 전용으로 붙인다.
+#                (touch mount-ssh)
+#
 # ⚠️ 생성하지 않는 것: tele.token. 봇은 사람이 @BotFather 에서 만들어야 한다.
 #    컨테이너마다 새 봇이 필요하다 — 같은 토큰을 둘이 물면 409 Conflict 로 하나가 죽는다.
 
@@ -79,6 +84,20 @@ if [ -n "$BOT_TOKEN" ]; then
   echo "▶ $CONTAINER — 텔레그램 + agentapi 채널로 구성"
 else
   echo "▶ $CONTAINER — agentapi 채널만으로 구성 (tele.token 없음)"
+fi
+
+# --- SSH 키 마운트 여부 -----------------------------------------------------
+# 워크스페이스에 mount-ssh 파일이 있으면 호스트의 ~/.ssh 를 읽기 전용으로 붙인다.
+#
+# 플래그가 아니라 표시 파일인 이유: 이 스크립트는 매번 완전한 세트를 새로
+# 생성하므로, 플래그로 두면 재실행할 때 빠뜨리는 순간 마운트가 조용히 사라진다.
+# 워크스페이스에 남는 파일이어야 재생성해도 같은 결과가 나온다 (tele.token 과 같은 방식).
+MOUNT_SSH=""
+[ -e mount-ssh ] && MOUNT_SSH=1
+
+if [ -n "$MOUNT_SSH" ]; then
+  echo "  · SSH 키 마운트: /home/$HOST_USER/.ssh (읽기 전용)"
+  echo "    ⚠️ 이 컨테이너의 에이전트가 호스트의 SSH 키 전체를 쓸 수 있게 된다."
 fi
 
 # --- 디렉토리 ---------------------------------------------------------------
@@ -293,6 +312,20 @@ services:
       # 전역 공유 (베이스) — 자격증명, 플러그인
       # 컨테이너 홈 경로를 호스트와 동일하게 맞춰야 plugins/ 안의 절대경로가 해석된다
       - /home/$HOST_USER/.claude:/home/$HOST_USER/.claude
+EOF
+  if [ -n "$MOUNT_SSH" ]; then
+    cat <<EOF
+
+      # SSH 키 (읽기 전용) — 워크스페이스에 mount-ssh 파일이 있어서 붙였다.
+      # ⚠️ 이 컨테이너의 에이전트가 호스트의 SSH 키 전체를 쓸 수 있다.
+      #
+      # known_hosts 도 읽기 전용이라 **처음 보는 호스트에는 접속하지 못한다**
+      # ("Host key verification failed"). 호스트에서 한 번 ssh 해서 등록하면
+      # 같은 파일을 보므로 컨테이너에서도 바로 된다.
+      - /home/$HOST_USER/.ssh:/home/$HOST_USER/.ssh:ro
+EOF
+  fi
+  cat <<EOF
 
       # 프로젝트 전용 — 위 베이스의 하위 경로를 덮어쓴다
 EOF
@@ -316,12 +349,14 @@ EOF
 # --- .gitignore -------------------------------------------------------------
 # 이미 있으면 중복 추가하지 않는다.
 touch .gitignore
+# mount-ssh 는 일부러 넣지 않는다. 비밀값이 아니고, 무시해 버리면 다른 데서
+# 재생성할 때 SSH 마운트가 조용히 빠진다 — 이 표시 파일이 막으려던 바로 그 상황이다.
 for pat in ".claude-state/" "docker-config/telegram/" "docker-config/ssh/" "tele.token" ".claude/"; do
   grep -qxF "$pat" .gitignore || echo "$pat" >> .gitignore
 done
 
 echo
-echo "생성 완료: $WORKSPACE"
+echo "생성 완료: $WORKSPACE${MOUNT_SSH:+  (SSH 키 마운트 포함)}"
 echo "  Dockerfile, docker-compose.yml, .gitignore"
 echo "  docker-config/{entrypoint.sh,claude.json,managed-settings.json}"
 echo "  docker-config/claude-settings{,-notelegram,-oneshot}.json"
