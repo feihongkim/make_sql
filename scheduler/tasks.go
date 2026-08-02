@@ -102,7 +102,7 @@ func (s *Scheduler) runTempCheck() {
 // 감시 대상 컨테이너 목록
 var watchContainers = []string{
 	"dart_pi", "drawchart_pi", "jarvis_pi", "kis2_pi", "ls_pi",
-	"MC_pi", "pyforme_pi", "pyforme2_pi", "stocktopreason_pi", "youtubeContent_pi",
+	"MC_pi", "pyforme_pi", "stocktopreason_pi", "youtubeContent_pi",
 	"dbsender_pi", "makesql_pi", "mkyoutube_pi", "news_pi",
 	"ontology_pi", "restgo_pi", "rstudio_pi", "saver_pi", "upbit_pi",
 	// pi 가 아닌 서비스 컨테이너. 죽어도 요청이 올 때까지 아무도 모르므로 감시한다.
