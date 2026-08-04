@@ -30,6 +30,9 @@
 
 set -euo pipefail
 
+# 아래에서 워크스페이스로 cd 하므로, 이 스크립트가 있는 곳은 지금 잡아둔다.
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 CLAUDE_VERSION=${CLAUDE_VERSION:-2.1.220}
 CODE_ROOT=${CODE_ROOT:-/home/feihong/code}
 HOST_USER=${HOST_USER:-feihong}
@@ -389,6 +392,10 @@ echo "  docker-config/telegram/{.env,access.json}"
 echo
 echo "다음:"
 echo "  cd $WORKSPACE && docker compose up -d --build"
-echo "  docker compose logs --no-color | grep entrypoint"
-echo "  docker exec $CONTAINER curl -sS http://127.0.0.1:8799/health"
+echo ""
+echo "  # ⚠️ 기동 후 반드시 채널을 확인한다. recreate 하면 채널이 없는 채로 뜨는 일이 있고"
+echo "  #    (mcp-needs-auth-cache.json 오염), 컨테이너는 정상으로 보여서 알아채기 어렵다."
+echo "  #    아래 스크립트가 확인하고 필요하면 캐시를 지운 뒤 재시작까지 한다."
+echo "  $SCRIPT_DIR/check_claude_channels.sh $CONTAINER"
+echo ""
 echo "  ./abledb ask $CONTAINER \"안녕\""
