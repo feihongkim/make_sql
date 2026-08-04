@@ -100,6 +100,21 @@ if [ -n "$MOUNT_SSH" ]; then
   echo "    ⚠️ 이 컨테이너의 에이전트가 호스트의 SSH 키 전체를 쓸 수 있게 된다."
 fi
 
+# --- 문서 디렉토리 (/docs) --------------------------------------------------
+# 이 프로젝트의 문서는 Jarvis/project/<프로젝트> 에 있다. pi 컨테이너는 예전부터
+# 그것을 /docs 로 붙여 왔는데 claude 컨테이너에는 빠져 있었다. 그래서 워크스페이스
+# CLAUDE.md 가 /docs/... 를 가리켜도 에이전트가 읽지 못했다 (LS_claude 가 그랬다).
+#
+# 표시 파일이 필요 없다 — 경로가 있으면 붙이고 없으면 넘어가는 규칙이라 자동으로 판단한다.
+DOCS_DIR="$CODE_ROOT/Jarvis/project/$PROJECT"
+[ -d "$DOCS_DIR" ] || DOCS_DIR=""
+
+if [ -n "$DOCS_DIR" ]; then
+  echo "  · 문서 마운트: $DOCS_DIR → /docs"
+else
+  echo "  · 문서 마운트 없음 ($CODE_ROOT/Jarvis/project/$PROJECT 가 없다)"
+fi
+
 # --- 디렉토리 ---------------------------------------------------------------
 # .claude-state 하위를 미리 만든다. 없으면 Docker 가 root 소유로 생성해 컨테이너가 못 쓴다.
 mkdir -p docker-config/telegram
@@ -313,6 +328,16 @@ services:
       # 컨테이너 홈 경로를 호스트와 동일하게 맞춰야 plugins/ 안의 절대경로가 해석된다
       - /home/$HOST_USER/.claude:/home/$HOST_USER/.claude
 EOF
+  if [ -n "$DOCS_DIR" ]; then
+    cat <<EOF
+
+      # 이 프로젝트의 문서 (Jarvis/project/$PROJECT). pi 컨테이너와 같은 자리에 붙인다.
+      # 워크스페이스 CLAUDE.md 가 /docs/... 를 참조하므로, 없으면 에이전트가
+      # 자기 지침이 가리키는 문서를 읽지 못한다.
+      # 쓰기 가능 — 문서를 갱신하는 것이 정상 작업이다.
+      - $DOCS_DIR:/docs
+EOF
+  fi
   if [ -n "$MOUNT_SSH" ]; then
     cat <<EOF
 
